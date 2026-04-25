@@ -1,0 +1,377 @@
+﻿#include "Parser.h"
+
+#include <iostream>
+#include <utility>
+
+std::unique_ptr<ProgramNode> Parser::parse() {
+    auto program = std::make_unique<ProgramNode>();
+    while (!isAtEnd()) {
+        program->declarations.emplace_back(parseDeclaration());
+    }
+    return program;
+}
+
+Token Parser::current() const {
+    return m_tokens[m_pos];
+}
+
+Token Parser::peek(uint8_t offset) const {
+    if (m_pos+offset >= m_tokens.size()) return m_tokens[m_tokens.size()-1];
+    return m_tokens[m_pos+offset];
+}
+
+Token Parser::advance(uint8_t offset) {
+    Token token = current();
+    if (m_pos + offset <= m_tokens.size()-1) {
+        m_pos += offset;
+    }
+    return token;
+}
+
+bool Parser::isAtEnd() const {
+    return current().type == TokenType::END_OF_FILE;
+}
+
+std::unique_ptr<ASTNode> Parser::parseDeclaration() {
+    std::vector<std::unique_ptr<AnnotationNode>> annotations;
+    while (current().type == TokenType::AT) {
+        annotations.emplace_back(parseAnnotation());
+    }
+    switch (current().type) {
+        case TokenType::CLASS:  return parseClassDecl();
+        case TokenType::STRUCT: return parseStructDecl();
+        case TokenType::ENUM:   return parseEnumDecl();
+        case TokenType::VOID:
+        case TokenType::INT:
+        case TokenType::FLOAT:
+        case TokenType::DOUBLE:
+        case TokenType::BOOL:
+        case TokenType::STRING: {
+            if (peek(2).type == TokenType::LPAREN) {
+                return parseFunctionDecl(std::move(annotations));
+            }
+            return parseVariableDecl();
+        }
+        default: return {};
+    }
+}
+
+std::unique_ptr<FunctionNode> Parser::parseFunctionDecl(std::vector<std::unique_ptr<AnnotationNode>> annotations) {
+    FunctionNode function;
+    function.annotations = std::move(annotations);
+    function.returnType = TypeInfo{.name = tokenTypeToString(current().type), .isReference = false};
+    advance();
+    function.name = current().value;
+    advance(2);
+    while (current().type != TokenType::RPAREN) {
+        auto parameter = std::make_unique<ParameterNode>();
+        // should be something in the tokentype type category
+        std::string name = current().value;
+        advance();
+        
+        bool isReference = false;
+        if (current().type == TokenType::AMPERSAND) {
+            isReference = true;
+            advance();
+        }
+        parameter->type = TypeInfo{.name = name, .isReference = isReference};
+        
+        // should be TokenType::IDENTIFIER
+        parameter->name = current().value;
+        function.parameters.emplace_back(std::move(parameter));
+        advance();
+        
+        match(TokenType::COMMA);
+    }
+    if (current().type == TokenType::SEMICOLON) {
+        // function declaration
+    } else if (current().type == TokenType::LBRACE) {
+        function.body = parseBlock();
+    }
+    
+    return std::make_unique<FunctionNode>(std::move(function));
+}
+
+std::unique_ptr<ClassNode> Parser::parseClassDecl() {
+    auto classNode = std::make_unique<ClassNode>();
+    advance();
+    classNode->name = expect(TokenType::IDENTIFIER).value;
+    expect(TokenType::LBRACE);
+    bool isPublic = false; // false = private, true = public
+    while (current().type != TokenType::RBRACE) {
+        if (current().type == TokenType::PUBLIC) {
+            isPublic = true;
+            advance();
+            expect(TokenType::COLON);
+            continue;
+        }
+        if (current().type == TokenType::PRIVATE) {
+            isPublic = false;
+            advance();
+            expect(TokenType::COLON);
+            continue;
+        }
+        if (isPublic) {
+            classNode->publicMembers.emplace_back(parseDeclaration());
+        } else {
+            classNode->privateMembers.emplace_back(parseDeclaration());
+        }
+    }
+    expect(TokenType::RBRACE);
+    return classNode;
+}
+
+std::unique_ptr<ASTNode> Parser::parseStatement() {
+    switch (current().type) {
+        case TokenType::IF: return parseIfStatement();
+        case TokenType::WHILE: return parseWhileStatement();
+        case TokenType::FOR: return parseForStatement();
+        case TokenType::RETURN: {
+            advance();
+            auto val = parseExpression();
+            expect(TokenType::SEMICOLON);
+            auto node = std::make_unique<ReturnNode>();
+            node->returnVal = std::move(val);
+            return node;
+        }
+        case TokenType::BREAK: {
+            advance();
+            expect(TokenType::SEMICOLON);
+            return std::make_unique<BreakNode>();
+        }
+        case TokenType::CONTINUE: {
+            advance();
+            expect(TokenType::SEMICOLON);
+            return std::make_unique<ContinueNode>();
+        }
+        case TokenType::VOID:
+        case TokenType::INT:
+        case TokenType::FLOAT:
+        case TokenType::DOUBLE:
+        case TokenType::BOOL:
+        case TokenType::STRING: return parseVariableDecl();
+        default: {
+            auto expression = parseExpression();
+            expect(TokenType::SEMICOLON);
+            return expression;
+        }
+    }
+}
+
+std::unique_ptr<ASTNode> Parser::parseIfStatement() {
+    auto ifNode = std::make_unique<IfNode>();
+    advance();
+    expect(TokenType::LPAREN);
+    ifNode->condition = parseExpression();
+    expect(TokenType::RPAREN);
+    ifNode->body = parseBlock();
+    if (current().type == TokenType::ELSE) {
+        advance();
+        if (current().type == TokenType::IF) {
+            ifNode->elseBody.emplace_back(parseIfStatement());
+        } else {
+            ifNode->elseBody = parseBlock();
+        }
+    }
+    return ifNode;
+}
+
+std::unique_ptr<ASTNode> Parser::parseWhileStatement() {
+    auto whileNode = std::make_unique<WhileNode>();
+    advance();
+    expect(TokenType::LPAREN);
+    whileNode->condition = parseExpression();
+    expect(TokenType::RPAREN);
+    whileNode->body = parseBlock();
+    return whileNode;
+}
+
+std::unique_ptr<ASTNode> Parser::parseForStatement() {
+    auto forNode = std::make_unique<ForNode>();
+    advance();
+    expect(TokenType::LPAREN);
+    forNode->initializer = parseVariableDecl();
+    forNode->condition = parseExpression();
+    expect(TokenType::SEMICOLON);
+    forNode->increment = parseExpression();
+    expect(TokenType::RPAREN);
+    forNode->body = parseBlock();
+    return forNode;
+}
+
+std::unique_ptr<ASTNode> Parser::parseExpression(int minBP) {
+    auto left = parsePrimary(); // parse the leftmost value
+    while (true) {
+        int bp = getBindingPower(current().type);
+        if (bp <= minBP) break;
+        TokenType op = advance().type;
+        auto right = parseExpression(bp);
+        auto binaryExpression = std::make_unique<BinaryExprNode>();
+        binaryExpression->left = std::move(left);
+        binaryExpression->op = op;
+        binaryExpression->right = std::move(right);
+        left = std::move(binaryExpression);
+    }
+    return left;
+}
+
+std::unique_ptr<StructNode> Parser::parseStructDecl() {
+    auto structNode = std::make_unique<StructNode>();
+    advance();
+    structNode->name = expect(TokenType::IDENTIFIER).value;
+    expect(TokenType::LBRACE);
+    while (current().type != TokenType::RBRACE) {
+        structNode->members.emplace_back(parseVariableDecl());
+    }
+    expect(TokenType::RBRACE);
+    return structNode;
+}
+
+std::unique_ptr<EnumNode> Parser::parseEnumDecl() {
+    auto enumNode = std::make_unique<EnumNode>();
+    advance();
+    enumNode->name = expect(TokenType::IDENTIFIER).value;
+    expect(TokenType::LBRACE);
+    while (current().type != TokenType::RBRACE) {
+        EnumMember member;
+        member.name = expect(TokenType::IDENTIFIER).value;
+        if (current().type == TokenType::EQUAL && peek().type == TokenType::INT_LITERAL) {
+            advance();
+            member.value = std::optional(std::stoi(advance().value)); // advance also consumes
+        }
+        match(TokenType::COMMA);
+        enumNode->members.emplace_back(member);
+    }
+    expect(TokenType::RBRACE);
+    return enumNode;
+}
+
+std::unique_ptr<VariableNode> Parser::parseVariableDecl() {
+    auto variable = std::make_unique<VariableNode>();
+    TypeInfo typeInfo{.name = tokenTypeToString(advance().type), .isReference = false};
+    if (current().type == TokenType::AMPERSAND) {
+        typeInfo.isReference = true;
+        advance();
+    }
+    variable->type = typeInfo;
+    variable->name = expect(TokenType::IDENTIFIER).value;
+    if (current().type == TokenType::EQUAL) {
+        advance();
+        variable->value = parseExpression();
+    }
+    expect(TokenType::SEMICOLON);
+    return variable;
+}
+
+std::unique_ptr<AnnotationNode> Parser::parseAnnotation() {
+    auto annotation = std::make_unique<AnnotationNode>();
+    expect(TokenType::AT);
+    annotation->name = expect(TokenType::IDENTIFIER).value;
+    if (current().type == TokenType::LPAREN) {
+        advance();
+        annotation->argument = expect(TokenType::STRING_LITERAL).value;
+        expect(TokenType::RPAREN);
+    }
+    return annotation;
+}
+
+std::vector<std::unique_ptr<ASTNode>> Parser::parseBlock() {
+    std::vector<std::unique_ptr<ASTNode>> blockNodes;
+    expect(TokenType::LBRACE);
+    while (current().type != TokenType::RBRACE && current().type != TokenType::END_OF_FILE) {
+        blockNodes.emplace_back(parseStatement());
+    }
+    expect(TokenType::RBRACE);
+    return blockNodes;
+}
+
+std::unique_ptr<ASTNode> Parser::parsePrimary() {
+    switch (current().type) {
+        case TokenType::INT_LITERAL:
+        case TokenType::FLOAT_LITERAL:
+        case TokenType::DOUBLE_LITERAL:
+        case TokenType::STRING_LITERAL:
+        case TokenType::BOOL_LITERAL: {
+            auto literal = std::make_unique<LiteralNode>();
+            literal->type = current().type;
+            literal->value = current().value;
+            advance();
+            return literal;
+        }
+        case TokenType::IDENTIFIER: {
+            if (peek().type == TokenType::LPAREN) {
+                // function
+                auto functionCall = std::make_unique<CallNode>();
+                functionCall->name = current().value;
+                advance(2);
+                while (current().type != TokenType::RPAREN) {
+                    functionCall->arguments.emplace_back(parseExpression());
+                    match(TokenType::COMMA);
+                }
+                advance(); // consume ')'
+                return functionCall;
+            }
+            // identifier
+            auto identifier = std::make_unique<IdentifierNode>();
+            identifier->name = current().value;
+            advance();
+            return identifier;
+        }
+        case TokenType::LPAREN: {
+            advance();
+            auto expression = parseExpression();
+            expect(TokenType::RPAREN);
+            return expression;
+        }
+        case TokenType::NOT:
+        case TokenType::MINUS: {
+            auto unary = std::make_unique<UnaryExprNode>();
+            unary->op = current().type;
+            advance();
+            unary->operand = parsePrimary();
+            return unary;
+        }
+        default: return nullptr;
+    }
+}
+
+int Parser::getBindingPower(TokenType type) {
+    switch (type) {
+        case TokenType::OR: return 1;
+        case TokenType::AND: return 2;
+        case TokenType::EQUAL_EQUAL:
+        case TokenType::NOT_EQUAL: return 3;
+        case TokenType::LESSER:
+        case TokenType::GREATER:
+        case TokenType::LESSER_EQUAL:
+        case TokenType::GREATER_EQUAL: return 4;
+        case TokenType::PLUS:
+        case TokenType::MINUS: return 5;
+        case TokenType::TIMES:
+        case TokenType::DIVIDE:
+        case TokenType::MOD: return 6;
+        case TokenType::NOT: return 7;
+        case TokenType::INCREMENT:
+        case TokenType::DECREMENT:
+        case TokenType::DOT:
+        case TokenType::LPAREN:
+        case TokenType::RPAREN: return 8;
+        default: return 0;
+    }
+}
+
+Token Parser::expect(TokenType type) {
+    if (current().type == type) {
+        return advance();
+    }
+    std::cerr << "Parser ERROR: expected: " << tokenTypeToString(type) << ", is: " << tokenTypeToString(current().type) << ", at line: " << current().line << ", column: " << current().column << "\n";
+    return Token{};
+}
+
+bool Parser::match(TokenType type) {
+    if (current().type == type) {
+        advance();
+        return true;
+    }
+    return false;
+}
