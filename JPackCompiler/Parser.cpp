@@ -11,6 +11,111 @@ std::unique_ptr<ProgramNode> Parser::parse() {
     return program;
 }
 
+void Parser::printNode(const ASTNode* node, int indent) {
+    if (auto* fn = dynamic_cast<const ProgramNode*>(node)) {
+        for (auto& stmt : fn->declarations) {
+            printNode(stmt.get(), indent + 2);
+        }
+    }
+    if (auto* fn = dynamic_cast<const ParameterNode*>(node)) {
+        std::cout << std::string(indent, ' ') << "ParameterNode: " << fn->name << "\n";
+    }
+    if (auto* fn = dynamic_cast<const AnnotationNode*>(node)) {
+        std::cout << std::string(indent, ' ') << "AnnotationNode: " << fn->name << "\n";
+        if (fn->argument.has_value()) {
+            std::cout << std::string(indent, ' ') << fn->argument.value() << "\n";
+        }
+    }
+    if (auto* fn = dynamic_cast<const FunctionNode*>(node)) {
+        std::cout << std::string(indent, ' ') << "FunctionNode: " << fn->name << "\n";
+        for (auto& para : fn->parameters) {
+            printNode(para.get(), indent + 2);
+        }
+        std::cout << std::string(indent, ' ') << fn->returnType.name << "\n";
+        for (auto& stmt : fn->body) {
+            printNode(stmt.get(), indent + 2);
+        }
+        for (auto& ann : fn->annotations) {
+            printNode(ann.get(), indent + 2);
+        }
+    }
+    if (auto* fn = dynamic_cast<const ClassNode*>(node)) {
+        std::cout << std::string(indent, ' ') << "ClassNode: " << fn->name << "\n";
+        for (auto& stmt : fn->publicMembers) {
+            printNode(stmt.get(), indent + 2);
+        }
+        for (auto& stmt : fn->privateMembers) {
+            printNode(stmt.get(), indent + 2);
+        }
+    }
+    if (auto* fn = dynamic_cast<const StructNode*>(node)) {
+        std::cout << std::string(indent, ' ') << "StructNode: " << fn->name << "\n";
+        for (auto& stmt : fn->members) {
+            printNode(stmt.get(), indent + 2);
+        }
+    }
+    if (auto* fn = dynamic_cast<const EnumNode*>(node)) {
+        std::cout << std::string(indent, ' ') << "EnumNode: " << fn->name << "\n";
+        for (auto& member : fn->members) {
+            std::cout << std::string(indent, ' ') << "StructMember: " << member.name << "\n";
+            if (member.value.has_value()) {
+                std::cout << std::string(indent, ' ') << member.value.value() << "\n";
+            }
+        }
+    }
+    if (auto* fn = dynamic_cast<const VariableNode*>(node)) {
+        std::cout << std::string(indent, ' ') << "VariableNode: " << fn->name << "\n";
+        printNode(fn->value.get(), indent + 2);
+    }
+    if (auto* fn = dynamic_cast<const IfNode*>(node)) {
+        std::cout << std::string(indent, ' ') << "IfNode: " << "\n";
+        printNode(fn->condition.get(), indent + 2);
+        std::cout << std::string(indent, ' ') << "body: " << "\n";
+        for (auto& stmt : fn->body) {
+            printNode(stmt.get(), indent + 2);
+        }
+        if (!fn->elseBody.empty()) {
+            std::cout << std::string(indent, ' ') << "else body: " << "\n";
+            for (auto& stmt : fn->elseBody) {
+                printNode(stmt.get(), indent + 2);
+            }
+        }
+    }
+    if (auto* fn = dynamic_cast<const WhileNode*>(node)) {
+        std::cout << std::string(indent, ' ') << "WhileNode: " << "\n";
+        printNode(fn->condition.get(), indent + 2);
+        std::cout << std::string(indent, ' ') << "body: " << "\n";
+        for (auto& stmt : fn->body) {
+            printNode(stmt.get(), indent + 2);
+        }
+    }
+    if (auto* fn = dynamic_cast<const ForNode*>(node)) {
+        std::cout << std::string(indent, ' ') << "ForNode: " << "\n";
+        printNode(fn->initializer.get(), indent + 2);
+        printNode(fn->condition.get(), indent + 2);
+        printNode(fn->increment.get(), indent + 2);
+        std::cout << std::string(indent, ' ') << "body: " << "\n";
+        for (auto& stmt : fn->body) {
+            printNode(stmt.get(), indent + 2);
+        }
+    }
+    if (auto* fn = dynamic_cast<const BinaryExprNode*>(node)) {
+        std::cout << std::string(indent, ' ') << "BinaryExpr: " << tokenTypeToString(fn->op) << "\n";
+        printNode(fn->left.get(), indent + 2);
+        printNode(fn->right.get(), indent + 2);
+    }
+    if (auto* fn = dynamic_cast<const LiteralNode*>(node)) {
+        std::cout << std::string(indent, ' ') << "Literal: " << fn->value << "\n";
+    }
+    if (auto* fn = dynamic_cast<const IdentifierNode*>(node)) {
+        std::cout << std::string(indent, ' ') << "Identifier: " << fn->name << "\n";
+    }
+    if (auto* fn = dynamic_cast<const ReturnNode*>(node)) {
+        std::cout << std::string(indent, ' ') << "ReturnNode\n";
+        if (fn->returnVal) printNode(fn->returnVal.get(), indent + 2);
+    }
+}
+
 Token Parser::current() const {
     return m_tokens[m_pos];
 }
@@ -52,7 +157,11 @@ std::unique_ptr<ASTNode> Parser::parseDeclaration() {
             }
             return parseVariableDecl();
         }
-        default: return {};
+        default:
+            std::cerr << "Parser ERROR: unexpected token " << tokenTypeToString(current().type) 
+                      << " at line " << current().line << "\n";
+            advance(); // skip the bad token
+            return nullptr;
     }
 }
 
@@ -83,6 +192,7 @@ std::unique_ptr<FunctionNode> Parser::parseFunctionDecl(std::vector<std::unique_
         
         match(TokenType::COMMA);
     }
+    expect(TokenType::RPAREN);
     if (current().type == TokenType::SEMICOLON) {
         // function declaration
     } else if (current().type == TokenType::LBRACE) {
@@ -118,6 +228,7 @@ std::unique_ptr<ClassNode> Parser::parseClassDecl() {
         }
     }
     expect(TokenType::RBRACE);
+    match(TokenType::SEMICOLON);
     return classNode;
 }
 
@@ -201,6 +312,18 @@ std::unique_ptr<ASTNode> Parser::parseForStatement() {
 
 std::unique_ptr<ASTNode> Parser::parseExpression(int minBP) {
     auto left = parsePrimary(); // parse the leftmost value
+    
+    // handle assignment
+    if (current().type == TokenType::EQUAL) {
+        advance();
+        auto right = parseExpression(0); // right associative, so 0
+        auto assign = std::make_unique<BinaryExprNode>();
+        assign->left = std::move(left);
+        assign->op = TokenType::EQUAL;
+        assign->right = std::move(right);
+        return assign;
+    }
+    
     while (true) {
         int bp = getBindingPower(current().type);
         if (bp <= minBP) break;
@@ -224,6 +347,7 @@ std::unique_ptr<StructNode> Parser::parseStructDecl() {
         structNode->members.emplace_back(parseVariableDecl());
     }
     expect(TokenType::RBRACE);
+    match(TokenType::SEMICOLON);
     return structNode;
 }
 
@@ -243,6 +367,7 @@ std::unique_ptr<EnumNode> Parser::parseEnumDecl() {
         enumNode->members.emplace_back(member);
     }
     expect(TokenType::RBRACE);
+    match(TokenType::SEMICOLON);
     return enumNode;
 }
 
@@ -354,8 +479,8 @@ int Parser::getBindingPower(TokenType type) {
         case TokenType::INCREMENT:
         case TokenType::DECREMENT:
         case TokenType::DOT:
-        case TokenType::LPAREN:
-        case TokenType::RPAREN: return 8;
+        case TokenType::LPAREN: return 8;
+        case TokenType::RPAREN: return 0;
         default: return 0;
     }
 }

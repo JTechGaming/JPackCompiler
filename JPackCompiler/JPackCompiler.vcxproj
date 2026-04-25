@@ -165,6 +165,9 @@
     <ClInclude Include="Parser.h" />
     <ClInclude Include="Token.h" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="test.jpack" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

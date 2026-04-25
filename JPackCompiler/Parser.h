@@ -13,6 +13,8 @@ public:
 
     std::unique_ptr<ProgramNode> parse();
     
+    void printNode(const ASTNode* node, int indent = 0);
+    
 private:
     std::vector<Token> m_tokens;
     size_t m_pos;
