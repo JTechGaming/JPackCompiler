@@ -135,7 +135,7 @@ std::string Codegen::generateStatement(ASTNode* node) {
             m_storageNames[variable->name] = variable->name;
             if (variable->value != nullptr) {
                 if (auto* literal = dynamic_cast<LiteralNode*>(variable->value.get())) {
-                    out += "data modify storage " + m_name + ":vars " + variable->name + " set value \"" + literal->value + "\"\n";
+                    out += "data modify storage " + m_name + ":vars " + variable->name + " set value '" + literal->value + "'\n";
                 } else if (auto* ident = dynamic_cast<IdentifierNode*>(variable->value.get())) {
                     out += "data modify storage " + m_name + ":vars " + variable->name + " set from storage " + m_name + ":vars " + m_storageNames[ident->name] + "\n";
                 }
@@ -379,11 +379,11 @@ std::string Codegen::generateCallArgs(const std::string& funcName, const std::ve
                        " double 0.000001 run scoreboard players get " + m_prefix + " " + arg.resultEntry + "\n";
             } else if (m_functionParamTypes[funcName][i] == "string") {
                 if (m_storageNames.contains(arg.resultEntry)) {
-                    out += "data modify storage " + m_name + ":args " + paramName + 
+                    out += "data modify storage " + m_name + ":args " + paramName +
                            " set from storage " + m_name + ":vars " + arg.resultEntry + "\n";
                 } else {
                     out += "data modify storage " + m_name + ":args " + paramName + 
-                           " set value \"" + arg.resultEntry + "\"\n";
+                           " set value '" + arg.resultEntry + "'\n";
                 }
             } else {
                 out += "execute store result storage " + m_name + ":args " + paramName + 
@@ -549,7 +549,7 @@ std::string Codegen::makeUUID() {
 }
 
 void Codegen::formatPrefix() {
+    std::ranges::transform(m_name, m_name.begin(),
+        [](unsigned char c) { return std::tolower(c); });
     m_prefix = m_name.substr(0, 6);
-    std::ranges::transform(m_prefix, m_prefix.begin(),
-                           [](unsigned char c) { return std::tolower(c); });
 }

@@ -1,0 +1,47 @@
+// Player Stats Tracker
+// Tracks kills, deaths, and calculates KD ratio display
+
+@load
+void onLoad() {
+    Chat::say("Player Stats Tracker loaded!");
+    Server::gamerule("keepInventory", "true");
+}
+
+@tick
+void onTick() {
+    checkPlayerHealth();
+}
+
+void checkPlayerHealth() {
+    int health = getPlayerHealth();
+    if (health < 6) {
+        Chat::title("@a", "{\"text\":\"Low Health!\",\"color\":\"red\",\"bold\":true}");
+        Chat::subtitle("@a", "{\"text\":\"Find food!\",\"color\":\"yellow\"}");
+    }
+}
+
+int getPlayerHealth() {
+    return 4;
+}
+
+void rewardPlayer(string player, int amount) {
+    Player::give(player, "minecraft:diamond", amount);
+    Player::addExperience(player, amount * 10);
+    Chat::tellRaw(player, "{\"text\":\"Reward received!\",\"color\":\"gold\"}");
+}
+
+void spawnGuard(int x, int y, int z) {
+    Entity::summon("minecraft:iron_golem", x, y, z);
+    World::setBlock(x, y - 1, z, "minecraft:obsidian");
+}
+
+void createArena(int cx, int cy, int cz, int size) {
+    int x1 = cx - size;
+    int y1 = cy;
+    int z1 = cz - size;
+    int x2 = cx + size;
+    int y2 = cy + size;
+    int z2 = cz + size;
+    World::fill(x1, y1, z1, x2, y2, z2, "minecraft:air");
+    World::fill(x1, y1, z1, x2, y1, z2, "minecraft:stone_bricks");
+}
