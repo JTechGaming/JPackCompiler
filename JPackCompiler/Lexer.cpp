@@ -13,6 +13,7 @@ static const std::unordered_map<std::string, TokenType> keywords = {
     {"false", TokenType::BOOL_LITERAL},
     {"string", TokenType::STRING},
     {"void", TokenType::VOID},
+    {"namespace", TokenType::NAMESPACE},
     {"class",  TokenType::CLASS},
     {"struct",  TokenType::STRUCT},
     {"enum",  TokenType::ENUM},

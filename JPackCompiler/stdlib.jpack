@@ -1,0 +1,243 @@
+namespace World {
+    // setBlock, fill, fillbiome, clone, border, data (block, block entity), forceload, gamerule, item (block entities)
+    // locate, loot, place, seed, time, weather, particle
+
+    @intrinsic
+    void setBlock(int x, int y, int z, string block) {
+        @cmd "setblock {x} {y} {z} {block}";
+    }
+    
+    @intrinsic
+    void fill(int x1, int y1, int z1, int x2, int y2, int z2, string block) {
+        @cmd "fill {x1} {y1} {z1} {x2} {y2} {z2} {block}";
+    }
+    
+    @intrinsic
+    void setBlockMode(int x, int y, int z, string block, string mode) {
+        @cmd "setblock {x} {y} {z} {block} {mode}";
+    }
+    
+    @intrinsic
+    void addBorderDistance(float distance) {
+        @cmd "worldborder add {distance}";
+    }
+    
+    @intrinsic
+    void addBorderDistanceOverTime(float distance, int time) {
+        @cmd "worldborder add {distance} {time}";
+    }
+    
+    @intrinsic
+    void setBorderDistance(float distance) {
+        @cmd "worldborder set {distance}";
+    }
+    
+    @intrinsic
+    void setBorderDistanceOverTime(float distance, int time) {
+        @cmd "worldborder set {distance} {time}";
+    }
+    
+    @intrinsic
+    void setBorderCenter(int x, int z) {
+        @cmd "worldborder center {x} {z}";
+    }
+    
+    //@intrinsic
+    //int getBorderDistance() {
+    //    @cmd "worldborder get";
+    //}
+}
+
+namespace Entity {
+    // attribute, damage, data (entity), effect, enchant, give, item (entities), kill, ride, summon, tag, teleport
+    @intrinsic
+    void summon(string entity, int x, int y, int z) {
+        @cmd "summon {entity} {x} {y} {z}";
+    }
+    
+    @intrinsic
+    void kill(string target) {
+        @cmd "kill {target}";
+    }
+    
+    @intrinsic
+    void tag(string target, string tag) {
+        @cmd "tag {target} add {tag}";
+    }
+    
+    @intrinsic
+    void removeTag(string target, string tag) {
+        @cmd "tag {target} remove {tag}";
+    }
+    
+    @intrinsic
+    void effect(string target, string effect, int duration, int amplifier) {
+        @cmd "effect give {target} {effect} {duration} {amplifier}";
+    }
+    
+    @intrinsic
+    void clearEffect(string target) {
+        @cmd "effect clear {target}";
+    }
+    
+    @intrinsic
+    void teleport(string target, int x, int y, int z) {
+        @cmd "teleport {target} {x} {y} {z}";
+    }
+    
+    @intrinsic
+    void damage(string target, int amount) {
+        @cmd "damage {target} {amount}";
+    }
+    
+    @intrinsic
+    void ride(string target, string vehicle) {
+        @cmd "ride {target} mount {vehicle}";
+    }
+}
+
+namespace Player {
+    // clear, advancement, experience, gamemode, kick, list, recipe, spectate, team, bossbar
+    @intrinsic
+    void gamemode(string target, string mode) {
+        @cmd "gamemode {mode} {target}";
+    }
+    
+    @intrinsic
+    void give(string target, string item, int count) {
+        @cmd "give {target} {item} {count}";
+    }
+    
+    @intrinsic
+    void clear(string target, string item) {
+        @cmd "clear {target} {item}";
+    }
+    
+    @intrinsic
+    void kick(string target, string reason) {
+        @cmd "kick {target} {reason}";
+    }
+    
+    @intrinsic
+    void addExperience(string target, int amount) {
+        @cmd "experience add {target} {amount} points";
+    }
+    
+    @intrinsic
+    void setExperience(string target, int amount) {
+        @cmd "experience set {target} {amount} points";
+    }
+    
+    @intrinsic
+    void addLevels(string target, int amount) {
+        @cmd "experience add {target} {amount} levels";
+    }
+    
+    @intrinsic
+    void advancement(string target, string action, string advancement) {
+        @cmd "advancement {action} {target} only {advancement}";
+    }
+    
+    @intrinsic
+    void recipe(string target, string action, string recipe) {
+        @cmd "recipe {action} {target} {recipe}";
+    }
+    
+    @intrinsic
+    void spectate(string target, string entity) {
+        @cmd "spectate {entity} {target}";
+    }
+}
+
+namespace Chat {
+    // msg, say, teammsg, tellraw, actionbar, title, subtitle
+    @intrinsic
+    void say(string message) {
+        @cmd "say {message}";
+    }
+    
+    @intrinsic
+    void tellRaw(string target, string message) {
+        @cmd "tellraw {target} {message}";
+    }
+    
+    @intrinsic
+    void msg(string target, string message) {
+        @cmd "msg {target} {message}";
+    }
+    
+    @intrinsic
+    void teamMsg(string message) {
+        @cmd "teammsg {message}";
+    }
+    
+    @intrinsic
+    void title(string target, string title) {
+        @cmd "title {target} title {title}";
+    }
+    
+    @intrinsic
+    void subtitle(string target, string subtitle) {
+        @cmd "title {target} subtitle {subtitle}";
+    }
+    
+    @intrinsic
+    void actionbar(string target, string message) {
+        @cmd "title {target} actionbar {message}";
+    }   
+}
+
+namespace Sound {
+    // playsound, stopsound
+    @intrinsic
+    void play(string sound, string target, int x, int y, int z) {
+        @cmd "playsound {sound} master {target} {x} {y} {z}";
+    }
+    
+    @intrinsic
+    void stop(string target, string sound) {
+        @cmd "stopsound {target} * {sound}";
+    }
+}
+
+namespace Server {
+    // schedule, scoreboard, trigger
+    @intrinsic
+    void schedule(string function, int ticks) {
+        @cmd "schedule function {function} {ticks}t";
+    }
+    
+    @intrinsic
+    void gamerule(string rule, string value) {
+        @cmd "gamerule {rule} {value}";
+    }
+}
+
+namespace Math {
+    int abs(int value) {
+        if (value < 0) {
+            return value * -1;
+        }
+        return value;
+    }
+    
+    int min(int a, int b) {
+        if (a < b) {
+            return a;
+        }
+        return b;
+    }
+    
+    int max(int a, int b) {
+        if (a > b) {
+            return a;
+        }
+        return b;
+    }
+    
+    @intrinsic
+    @returns_command
+    int random(int min, int max) {
+        @cmd "random value {min}..{max}";
+    }
+}

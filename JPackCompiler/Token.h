@@ -9,7 +9,7 @@ enum class TokenType {
     INT, FLOAT, DOUBLE, BOOL, STRING, VOID,
 
     // Keywords
-    CLASS, STRUCT, ENUM,
+    NAMESPACE, CLASS, STRUCT, ENUM,
     IF, ELSE, WHILE, FOR, RETURN, BREAK, CONTINUE,
     PUBLIC, PRIVATE,
 

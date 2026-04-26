@@ -25,6 +25,7 @@ private:
     bool  isAtEnd() const;
     
     std::unique_ptr<ASTNode>        parseDeclaration();
+    std::unique_ptr<NamespaceNode>  parseNamespaceDecl();
     std::unique_ptr<FunctionNode>   parseFunctionDecl(std::vector<std::unique_ptr<AnnotationNode>> annotations);
     std::unique_ptr<ClassNode>      parseClassDecl();
     std::unique_ptr<ASTNode>        parseStatement();

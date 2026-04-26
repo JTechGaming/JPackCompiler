@@ -8,6 +8,8 @@
 
 struct ASTNode {
     virtual ~ASTNode() = default;
+    int sourceLine = 0;
+    int sourceColumn = 0;
 };
 
 struct TypeInfo {
@@ -32,6 +34,7 @@ struct FunctionNode : ASTNode {
     std::vector<std::unique_ptr<ASTNode>> body;
     std::vector<std::unique_ptr<AnnotationNode>> annotations;
     bool isIntrinsic = false;
+    bool isReturnsCommand = false;
 };
 
 struct ClassNode : ASTNode {
@@ -107,6 +110,7 @@ struct IdentifierNode : ASTNode {
 };
 
 struct CallNode : ASTNode {
+    std::string namespaceName;
     std::string name;
     std::vector<std::unique_ptr<ASTNode>> arguments;
 };
@@ -114,6 +118,11 @@ struct CallNode : ASTNode {
 struct MemberAccessNode : ASTNode {
     std::unique_ptr<ASTNode> object;
     std::string memberName;
+};
+
+struct NamespaceNode : ASTNode {
+    std::string name;
+    std::vector<std::unique_ptr<ASTNode>> declarations;
 };
 
 struct ProgramNode : ASTNode {

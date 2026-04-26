@@ -12,21 +12,25 @@ int main(int argc, char *argv[]){
         std::cerr << "Usage: JPackCompiler <sourcefile>\n";
         return 1;
     }
-    std::ifstream file;
-    file.open(argv[1]);
-    if (!file.is_open()) {
-        std::cerr << "Error: could not open file: " << argv[1] << "\n";
-        return 1;
+    std::string source;
+    for (int i = 1; i < argc - 1; i++) {
+        std::ifstream file;
+        file.open(argv[i]);
+        if (!file.is_open()) {
+            std::cerr << "Error: could not open file: " << argv[1] << "\n";
+            return 1;
+        }
+        std::string fileSource((std::istreambuf_iterator<char>(file)),
+                            std::istreambuf_iterator<char>());
+        if (fileSource.size() >= 3 &&
+            static_cast<unsigned char>(fileSource[0]) == 0xEF &&
+            static_cast<unsigned char>(fileSource[1]) == 0xBB &&
+            static_cast<unsigned char>(fileSource[2]) == 0xBF) {
+            fileSource = fileSource.substr(3);
+        }
+        file.close();
+        source += fileSource;
     }
-    std::string source((std::istreambuf_iterator<char>(file)),
-                        std::istreambuf_iterator<char>());
-    if (source.size() >= 3 &&
-        static_cast<unsigned char>(source[0]) == 0xEF &&
-        static_cast<unsigned char>(source[1]) == 0xBB &&
-        static_cast<unsigned char>(source[2]) == 0xBF) {
-        source = source.substr(3);
-    }
-    file.close();
     
     Lexer lexer(source);
     auto tokens = lexer.tokenize();
@@ -45,7 +49,7 @@ int main(int argc, char *argv[]){
     std::cout << "Declarations: " << program->declarations.size() << "\n";
     parser.printNode(program.get());
     
-    std::string outputPath = argc >= 3 ? argv[2] : "output";
+    std::string outputPath = argc >= 3 ? argv[argc - 1] : "output";
     
     Codegen codegen(program.get(), std::filesystem::path(argv[1]).stem().string());
     codegen.generate(outputPath);

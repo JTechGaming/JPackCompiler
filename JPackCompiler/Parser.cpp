@@ -144,6 +144,7 @@ std::unique_ptr<ASTNode> Parser::parseDeclaration() {
         annotations.emplace_back(parseAnnotation());
     }
     switch (current().type) {
+        case TokenType::NAMESPACE: return parseNamespaceDecl();
         case TokenType::CLASS:  return parseClassDecl();
         case TokenType::STRUCT: return parseStructDecl();
         case TokenType::ENUM:   return parseEnumDecl();
@@ -166,12 +167,25 @@ std::unique_ptr<ASTNode> Parser::parseDeclaration() {
     }
 }
 
+std::unique_ptr<NamespaceNode> Parser::parseNamespaceDecl() {
+    auto namespaceNode = std::make_unique<NamespaceNode>();
+    namespaceNode->sourceLine = current().line;
+    namespaceNode->sourceColumn = current().column;
+    advance();
+    namespaceNode->name = expect(TokenType::IDENTIFIER).value;
+    expect(TokenType::LBRACE);
+    while (current().type != TokenType::RBRACE) {
+        namespaceNode->declarations.emplace_back(parseDeclaration());
+    }
+    expect(TokenType::RBRACE);
+    return namespaceNode;
+}
+
 std::unique_ptr<FunctionNode> Parser::parseFunctionDecl(std::vector<std::unique_ptr<AnnotationNode>> annotations) {
     FunctionNode function;
     for (auto& annotation : annotations) {
-        if (annotation->name == "intrinsic") {
-            function.isIntrinsic = true;
-        }
+        if (annotation->name == "intrinsic") function.isIntrinsic = true;
+        if (annotation->name == "returns_command") function.isReturnsCommand = true;
     }
     function.annotations = std::move(annotations);
     function.returnType = TypeInfo{.name = tokenTypeToString(current().type), .isReference = false};
@@ -180,6 +194,8 @@ std::unique_ptr<FunctionNode> Parser::parseFunctionDecl(std::vector<std::unique_
     advance(2);
     while (current().type != TokenType::RPAREN) {
         auto parameter = std::make_unique<ParameterNode>();
+        parameter->sourceLine = current().line;
+        parameter->sourceColumn = current().column;
         // should be something in the tokentype type category
         std::string name = tokenTypeToString(current().type);
         std::ranges::transform(name, name.begin(), [](unsigned char c) { return std::tolower(c); });
@@ -206,11 +222,16 @@ std::unique_ptr<FunctionNode> Parser::parseFunctionDecl(std::vector<std::unique_
         function.body = parseBlock();
     }
     
-    return std::make_unique<FunctionNode>(std::move(function));
+    auto node = std::make_unique<FunctionNode>(std::move(function));
+    node->sourceLine = current().line;
+    node->sourceColumn = current().column;
+    return node;
 }
 
 std::unique_ptr<ClassNode> Parser::parseClassDecl() {
     auto classNode = std::make_unique<ClassNode>();
+    classNode->sourceLine = current().line;
+    classNode->sourceColumn = current().column;
     advance();
     classNode->name = expect(TokenType::IDENTIFIER).value;
     expect(TokenType::LBRACE);
@@ -245,22 +266,36 @@ std::unique_ptr<ASTNode> Parser::parseStatement() {
         case TokenType::WHILE: return parseWhileStatement();
         case TokenType::FOR: return parseForStatement();
         case TokenType::RETURN: {
+            int line = current().line;
+            int col = current().column;
             advance();
             auto val = parseExpression();
             expect(TokenType::SEMICOLON);
             auto node = std::make_unique<ReturnNode>();
+            node->sourceLine = line;
+            node->sourceColumn = col;
             node->returnVal = std::move(val);
             return node;
         }
         case TokenType::BREAK: {
+            int line = current().line;
+            int col = current().column;
             advance();
             expect(TokenType::SEMICOLON);
-            return std::make_unique<BreakNode>();
+            auto node = std::make_unique<BreakNode>();
+            node->sourceLine = line;
+            node->sourceColumn = col;
+            return node;
         }
         case TokenType::CONTINUE: {
+            int line = current().line;
+            int col = current().column;
             advance();
             expect(TokenType::SEMICOLON);
-            return std::make_unique<ContinueNode>();
+            auto node = std::make_unique<ContinueNode>();
+            node->sourceLine = line;
+            node->sourceColumn = col;
+            return node;
         }
         case TokenType::VOID:
         case TokenType::INT:
@@ -273,6 +308,8 @@ std::unique_ptr<ASTNode> Parser::parseStatement() {
             std::string directive = expect(TokenType::IDENTIFIER).value;
             if (directive == "cmd") {
                 auto raw = std::make_unique<RawCommandNode>();
+                raw->sourceLine = current().line;
+                raw->sourceColumn = current().column;
                 raw->command = expect(TokenType::STRING_LITERAL).value;
                 expect(TokenType::SEMICOLON);
                 return raw;
@@ -292,6 +329,8 @@ std::unique_ptr<ASTNode> Parser::parseStatement() {
 
 std::unique_ptr<ASTNode> Parser::parseIfStatement() {
     auto ifNode = std::make_unique<IfNode>();
+    ifNode->sourceLine = current().line;
+    ifNode->sourceColumn = current().column;
     advance();
     expect(TokenType::LPAREN);
     ifNode->condition = parseExpression();
@@ -310,6 +349,8 @@ std::unique_ptr<ASTNode> Parser::parseIfStatement() {
 
 std::unique_ptr<ASTNode> Parser::parseWhileStatement() {
     auto whileNode = std::make_unique<WhileNode>();
+    whileNode->sourceLine = current().line;
+    whileNode->sourceColumn = current().column;
     advance();
     expect(TokenType::LPAREN);
     whileNode->condition = parseExpression();
@@ -320,6 +361,8 @@ std::unique_ptr<ASTNode> Parser::parseWhileStatement() {
 
 std::unique_ptr<ASTNode> Parser::parseForStatement() {
     auto forNode = std::make_unique<ForNode>();
+    forNode->sourceLine = current().line;
+    forNode->sourceColumn = current().column;
     advance();
     expect(TokenType::LPAREN);
     forNode->initializer = parseVariableDecl();
@@ -339,6 +382,8 @@ std::unique_ptr<ASTNode> Parser::parseExpression(int minBP) {
         advance();
         auto right = parseExpression(0); // right associative, so 0
         auto assign = std::make_unique<BinaryExprNode>();
+        assign->sourceLine = current().line;
+        assign->sourceColumn = current().column;
         assign->left = std::move(left);
         assign->op = TokenType::EQUAL;
         assign->right = std::move(right);
@@ -351,6 +396,8 @@ std::unique_ptr<ASTNode> Parser::parseExpression(int minBP) {
         TokenType op = advance().type;
         auto right = parseExpression(bp);
         auto binaryExpression = std::make_unique<BinaryExprNode>();
+        binaryExpression->sourceLine = current().line;
+        binaryExpression->sourceColumn = current().column;
         binaryExpression->left = std::move(left);
         binaryExpression->op = op;
         binaryExpression->right = std::move(right);
@@ -361,6 +408,8 @@ std::unique_ptr<ASTNode> Parser::parseExpression(int minBP) {
 
 std::unique_ptr<StructNode> Parser::parseStructDecl() {
     auto structNode = std::make_unique<StructNode>();
+    structNode->sourceLine = current().line;
+    structNode->sourceColumn = current().column;
     advance();
     structNode->name = expect(TokenType::IDENTIFIER).value;
     expect(TokenType::LBRACE);
@@ -374,6 +423,8 @@ std::unique_ptr<StructNode> Parser::parseStructDecl() {
 
 std::unique_ptr<EnumNode> Parser::parseEnumDecl() {
     auto enumNode = std::make_unique<EnumNode>();
+    enumNode->sourceLine = current().line;
+    enumNode->sourceColumn = current().column;
     advance();
     enumNode->name = expect(TokenType::IDENTIFIER).value;
     expect(TokenType::LBRACE);
@@ -394,6 +445,8 @@ std::unique_ptr<EnumNode> Parser::parseEnumDecl() {
 
 std::unique_ptr<VariableNode> Parser::parseVariableDecl() {
     auto variable = std::make_unique<VariableNode>();
+    variable->sourceLine = current().line;
+    variable->sourceColumn = current().column;
     TypeInfo typeInfo{.name = tokenTypeToString(advance().type), .isReference = false};
     if (current().type == TokenType::AMPERSAND) {
         typeInfo.isReference = true;
@@ -411,6 +464,8 @@ std::unique_ptr<VariableNode> Parser::parseVariableDecl() {
 
 std::unique_ptr<AnnotationNode> Parser::parseAnnotation() {
     auto annotation = std::make_unique<AnnotationNode>();
+    annotation->sourceLine = current().line;
+    annotation->sourceColumn = current().column;
     expect(TokenType::AT);
     annotation->name = expect(TokenType::IDENTIFIER).value;
     if (current().type == TokenType::LPAREN) {
@@ -439,6 +494,8 @@ std::unique_ptr<ASTNode> Parser::parsePrimary() {
         case TokenType::STRING_LITERAL:
         case TokenType::BOOL_LITERAL: {
             auto literal = std::make_unique<LiteralNode>();
+            literal->sourceLine = current().line;
+            literal->sourceColumn = current().column;
             literal->type = current().type;
             literal->value = current().value;
             advance();
@@ -447,12 +504,32 @@ std::unique_ptr<ASTNode> Parser::parsePrimary() {
         case TokenType::IDENTIFIER: {
             // identifier
             auto identifier = std::make_unique<IdentifierNode>();
+            identifier->sourceLine = current().line;
+            identifier->sourceColumn = current().column;
             identifier->name = current().value;
             advance();
+            
+            if (current().type == TokenType::DOUBLE_COLON) {
+                advance(); // consume ::
+                auto call = std::make_unique<CallNode>();
+                call->sourceLine = current().line;
+                call->sourceColumn = current().column;
+                call->namespaceName = identifier->name;
+                call->name = expect(TokenType::IDENTIFIER).value;
+                advance(); // consume '('
+                while (current().type != TokenType::RPAREN) {
+                    call->arguments.emplace_back(parseExpression());
+                    match(TokenType::COMMA);
+                }
+                advance(); // consume ')'
+                return call;
+            }
             
             // check for postfix ++ or --
             if (current().type == TokenType::INCREMENT || current().type == TokenType::DECREMENT) {
                 auto unary = std::make_unique<UnaryExprNode>();
+                unary->sourceLine = current().line;
+                unary->sourceColumn = current().column;
                 unary->op = current().type;
                 unary->operand = std::move(identifier);
                 advance();
@@ -462,6 +539,8 @@ std::unique_ptr<ASTNode> Parser::parsePrimary() {
             // function
             if (current().type == TokenType::LPAREN) {
                 auto functionCall = std::make_unique<CallNode>();
+                functionCall->sourceLine = current().line;
+                functionCall->sourceColumn = current().column;
                 functionCall->name = identifier->name; // use already-captured name
                 advance(); // consume '('
                 while (current().type != TokenType::RPAREN) {
@@ -483,6 +562,8 @@ std::unique_ptr<ASTNode> Parser::parsePrimary() {
         case TokenType::NOT:
         case TokenType::MINUS: {
             auto unary = std::make_unique<UnaryExprNode>();
+            unary->sourceLine = current().line;
+            unary->sourceColumn = current().column;
             unary->op = current().type;
             advance();
             unary->operand = parsePrimary();

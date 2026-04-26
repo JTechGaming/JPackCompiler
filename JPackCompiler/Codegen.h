@@ -28,6 +28,7 @@ private:
     std::string m_name;
     std::string m_prefix;
     std::string m_outputPath;
+    std::string m_currentNamespace;
     std::vector<FunctionNode*> m_loadFunctions;
     std::vector<FunctionNode*> m_tickFunctions;
     std::vector<std::string> m_tempEntries;
@@ -47,6 +48,7 @@ private:
     std::string generateSubFunction(const std::string& name, const std::vector<std::unique_ptr<ASTNode>>& body);
     ConditionResult generateCondition(ASTNode* node);
     void registerFunctions();
+    void registerFunction(FunctionNode* fn);
     void generatePackMeta() const;
     void generateTickJson() const;
     void generateLoadJson() const;

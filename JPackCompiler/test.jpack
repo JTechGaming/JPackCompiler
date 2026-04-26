@@ -1,44 +1,103 @@
-﻿void addScore(int player, int amount) {
-    player = player + amount;
+﻿@load
+void onLoad() {
+    // initialize some global state
+    World::setBlock(0, 64, 0, "minecraft:gold_block");
+    Chat::say("Datapack loaded!");
 }
 
-@intrinsic
-void setBlock(int x, int y, int z, string block) {
-    @cmd "setblock {x} {y} {z} {block}";
+@tick
+void onTick() {
+    // test basic arithmetic
+    int x = 10;
+    int y = 20;
+    int sum = add(x, y);
+    
+    // test if/else
+    if (sum == 30) {
+        Chat::say("Sum is correct!");
+    } else {
+        Chat::say("Sum is wrong!");
+    }
+    
+    // test while loop
+    int counter = 0;
+    while (counter < 5) {
+        counter = counter + 1;
+    }
+    
+    // test for loop
+    int total = 0;
+    for (int i = 0; i < 10; i++) {
+        total = total + i;
+    }
+    
+    // test nested if
+    if (total > 40) {
+        if (total > 44) {
+            Chat::say("Total is 45!");
+        } else {
+            Chat::say("Total is between 41 and 44");
+        }
+    }
+    
+    // test string variables
+    string msg = "Hello from JPackCompiler!";
+    Chat::tellRaw("@a", msg);
+    
+    // test world manipulation
+    int bx = 5;
+    int by = 64;
+    int bz = 5;
+    World::setBlock(bx, by, bz, "minecraft:diamond_block");
+    World::fill(0, 60, 0, 10, 60, 10, "minecraft:stone");
+    
+    // test entity stuff
+    Entity::summon("minecraft:creeper", 0, 64, 0);
+    
+    // test math
+    int absVal = Math::abs(-5);
+    int minVal = Math::min(10, 20);
+    int maxVal = Math::max(10, 20);
+    int rng = Math::random(1, 100);
+    
+    // test player stuff
+    Player::gamemode("@a", "survival");
+    Player::give("@a", "minecraft:diamond", 1);
+    
+    // test sound
+    Sound::play("minecraft:entity.player.levelup", "@a", 0, 64, 0);
+    
+    // test title
+    Chat::title("@a", "Welcome!");
+    Chat::subtitle("@a", "This datapack works!");
+    
+    // test border
+    World::setBorderCenter(0, 0);
+    World::setBorderDistance(1000);
+    
+    // test weather
+    Server::gamerule("doDaylightCycle", "false");
+    Server::gamerule("doWeatherCycle", "false");
 }
 
 int add(int a, int b) {
     return a + b;
 }
 
-@tick
-void onTick() {
-    int x = 10;
-    addScore(x, 5);
-    float y = 1.5f;
-    if (x == 10) {
-        x = x + 1;
-    } else {
-        x = 0;
+int factorial(int n) {
+    if (n == 0) {
+        return 1;
     }
-    while (x < 100) {
-        x = x + 1;
-    }
-    for (int i = 0; i < 10; i++) {
-        int x = i;
-    }
-    
-    int px = 10;
-    int py = 64;
-    int pz = 10;
-    setBlock(px, py, pz, "stone");
-    
-    int result = add(5, 3);
+    int result = n * factorial(n);
+    return result;
 }
 
-class Player {
-public:
-    int health = 100;
-private:
-    float speed = 1.5f;
-};
+int clamp(int value, int min, int max) {
+    if (value < min) {
+        return min;
+    }
+    if (value > max) {
+        return max;
+    }
+    return value;
+}
