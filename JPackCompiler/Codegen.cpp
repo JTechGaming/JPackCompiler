@@ -63,8 +63,17 @@ void Codegen::generateFunction(FunctionNode* function) {
     }
     
     for (auto& statement : function->body) {
+        m_tempEntries.clear();
         file << generateStatement(statement.get()) << '\n';
+        for (auto& entry : m_tempEntries) {
+            file << "scoreboard objectives remove " + entry + "\n";
+        }
     }
+    
+    for (auto& entry : m_localVarEntries) {
+        file << "scoreboard objectives remove " + entry + "\n";
+    }
+    m_localVarEntries.clear();
     
     file.close();
 }
@@ -85,6 +94,7 @@ std::string Codegen::generateStatement(ASTNode* node) {
         }
         std::string uuid = m_prefix + makeUUID();
         m_scoreboardNames[variable->name] = uuid;
+        m_localVarEntries.emplace_back(uuid);
         std::string out = "scoreboard objectives add " + uuid + " dummy\n";
         if (variable->value != nullptr) {
             ExprResult initResult = generateExpression(variable->value.get());
@@ -94,14 +104,30 @@ std::string Codegen::generateStatement(ASTNode* node) {
         }
         return out;
     }
+    if (auto* returnNode = dynamic_cast<ReturnNode*>(node)) {
+        if (returnNode->returnVal == nullptr) {
+            return "return 0\n"; // void return
+        }
+        ExprResult val = generateExpression(returnNode->returnVal.get());
+        std::string out = val.commands;
+        out += "execute store result storage " + m_name + ":return value int 1 run scoreboard players get " + m_prefix + " " + val.resultEntry + "\n";
+        out += "return run data get storage " + m_name + ":return value\n";
+        return out;
+    }
     if (auto* ifNode = dynamic_cast<IfNode*>(node)) {
         ConditionResult condition = generateCondition(ifNode->condition.get());
         std::string ifUUID = "if_" + makeUUID().substr(2);
         std::string elseUUID = "else_" + makeUUID().substr(2);
+        auto savedTemps = m_tempEntries;
+        m_tempEntries.clear();
         std::string bodyFunc = generateSubFunction(ifUUID, ifNode->body);
+        m_tempEntries = savedTemps;
         std::string elseBodyFunc;
         if (!ifNode->elseBody.empty()) {
+            savedTemps = m_tempEntries;
+            m_tempEntries.clear();
             elseBodyFunc = generateSubFunction(elseUUID, ifNode->elseBody);
+            m_tempEntries = savedTemps;
         }
         std::string out = condition.commands;
         out += "execute " + condition.condition + " run function " + bodyFunc + "\n";
@@ -113,7 +139,10 @@ std::string Codegen::generateStatement(ASTNode* node) {
     if (auto* whileNode = dynamic_cast<WhileNode*>(node)) {
         ConditionResult condition = generateCondition(whileNode->condition.get());
         std::string whileUUID = "while_" + makeUUID().substr(2);
+        auto savedTemps = m_tempEntries;
+        m_tempEntries.clear();
         std::string bodyFunc = generateSubFunction(whileUUID, whileNode->body);
+        m_tempEntries = savedTemps;
         auto path = std::filesystem::path(m_outputPath) / "data" / m_name / "functions" / (whileUUID + ".mcfunction");
         std::ofstream file(path, std::ios::app); // append mode
         file << condition.commands;
@@ -137,7 +166,10 @@ std::string Codegen::generateStatement(ASTNode* node) {
         std::string initializer = generateStatement(forNode->initializer.get());
         ConditionResult condition = generateCondition(forNode->condition.get());
         std::string forUUID = "for_" + makeUUID().substr(2);
+        auto savedTemps = m_tempEntries;
+        m_tempEntries.clear();
         std::string bodyFunc = generateSubFunction(forUUID, forNode->body);
+        m_tempEntries = savedTemps;
         auto path = std::filesystem::path(m_outputPath) / "data" / m_name / "functions" / (forUUID + ".mcfunction");
         std::ofstream file(path, std::ios::app); // append mode
         file << condition.commands;
@@ -160,34 +192,10 @@ std::string Codegen::generateStatement(ASTNode* node) {
         auto& params = m_functionParams[funcName];
         
         if (m_intrinsicFunctions.contains(funcName)) {
-            for (int i = 0; i < call->arguments.size(); i++) {
-                ExprResult arg = generateExpression(call->arguments[i].get());
-                out += arg.commands;
-                std::string paramName = m_functionParamNames[funcName][i];
-                if (m_functionParamTypes[funcName][i] == "string") {
-                    if (arg.isStorage && !arg.resultEntry.empty()) {
-                        // check if it's a variable (path) or a literal value
-                        if (m_storageNames.contains(arg.resultEntry)) {
-                            // string variable so copy from storage
-                            out += "data modify storage " + m_name + ":args " + paramName + 
-                                   " set from storage " + m_name + ":vars " + arg.resultEntry + "\n";
-                        } else {
-                            // string literal so set value directly
-                            out += "data modify storage " + m_name + ":args " + paramName + 
-                                   " set value \"" + arg.resultEntry + "\"\n";
-                        }
-                    }
-                } else {
-                    out += "execute store result storage " + m_name + ":args " + paramName + " int 1 run scoreboard players get " + m_prefix + " " + arg.resultEntry + "\n";
-                }
-            }
+            out += generateCallArgs(funcName, call->arguments);
             out += "function " + m_name + ":" + funcName + " with storage " + m_name + ":args\n";
         } else {
-            for (int i = 0; i < call->arguments.size(); i++) {
-                ExprResult arg = generateExpression(call->arguments[i].get());
-                out += arg.commands;
-                out += "scoreboard players operation " + m_prefix + " " + params[i] + " = " + m_prefix + " " + arg.resultEntry + "\n";
-            }
+            out += generateCallArgs(funcName, call->arguments);
             out += "function " + m_name + ":" + funcName + "\n";
         }
         return out;
@@ -211,6 +219,7 @@ ExprResult Codegen::generateExpression(ASTNode* node) {
             return {.commands = "", .resultEntry = literal->value, .isStorage = true};
         }
         std::string tempEntry = m_prefix + makeUUID();
+        m_tempEntries.emplace_back(tempEntry);
         std::string value = literal->value;
         if (literal->type == TokenType::FLOAT_LITERAL) {
             value = std::to_string(static_cast<int>(std::stof(literal->value) * 1000));
@@ -220,6 +229,19 @@ ExprResult Codegen::generateExpression(ASTNode* node) {
         std::string commands = "scoreboard objectives add " + tempEntry + " dummy\n";
         commands += "scoreboard players set " + m_prefix + " " + tempEntry + " " + value + "\n";
         return {.commands = commands, .resultEntry = tempEntry};
+    }
+    if (auto* call = dynamic_cast<CallNode*>(node)) {
+        std::string funcName = call->name;
+        std::ranges::transform(funcName, funcName.begin(),
+            [](unsigned char c) { return std::tolower(c); });
+        
+        std::string out;
+        std::string temp = m_prefix + makeUUID();
+        m_tempEntries.emplace_back(temp);
+        out += "scoreboard objectives add " + temp + " dummy\n";
+        out += generateCallArgs(funcName, call->arguments);
+        out += "execute store result score " + m_prefix + " " + temp + " run function " + m_name + ":" + funcName + "\n";
+        return {.commands = out, .resultEntry = temp};
     }
     if (auto* binary = dynamic_cast<BinaryExprNode*>(node)) {
         ExprResult leftResult  = generateExpression(binary->left.get());
@@ -243,6 +265,7 @@ ExprResult Codegen::generateExpression(ASTNode* node) {
         }
         // create temp to hold result
         std::string temp = m_prefix + makeUUID();
+        m_tempEntries.emplace_back(temp);
         commands += "scoreboard objectives add " + temp + " dummy\n";
         // copy left into temp
         commands += "scoreboard players operation " + m_prefix + " " + temp + " = " + m_prefix + " " + leftResult.resultEntry + "\n";
@@ -255,12 +278,49 @@ ExprResult Codegen::generateExpression(ASTNode* node) {
     return {.commands = "", .resultEntry = ""};
 }
 
+std::string Codegen::generateCallArgs(const std::string& funcName, const std::vector<std::unique_ptr<ASTNode>>& arguments) {
+    std::string out;
+    auto& params = m_functionParams[funcName];
+    
+    if (m_intrinsicFunctions.contains(funcName)) {
+        for (int i = 0; i < arguments.size(); i++) {
+            ExprResult arg = generateExpression(arguments[i].get());
+            out += arg.commands;
+            std::string paramName = m_functionParamNames[funcName][i];
+            if (m_functionParamTypes[funcName][i] == "string") {
+                if (m_storageNames.contains(arg.resultEntry)) {
+                    out += "data modify storage " + m_name + ":args " + paramName + 
+                           " set from storage " + m_name + ":vars " + arg.resultEntry + "\n";
+                } else {
+                    out += "data modify storage " + m_name + ":args " + paramName + 
+                           " set value \"" + arg.resultEntry + "\"\n";
+                }
+            } else {
+                out += "execute store result storage " + m_name + ":args " + paramName + 
+                       " int 1 run scoreboard players get " + m_prefix + " " + arg.resultEntry + "\n";
+            }
+        }
+    } else {
+        for (int i = 0; i < arguments.size(); i++) {
+            ExprResult arg = generateExpression(arguments[i].get());
+            out += arg.commands;
+            out += "scoreboard players operation " + m_prefix + " " + params[i] + 
+                   " = " + m_prefix + " " + arg.resultEntry + "\n";
+        }
+    }
+    return out;
+}
+
 std::string Codegen::generateSubFunction(const std::string& name, const std::vector<std::unique_ptr<ASTNode>>& body) {
     auto path = std::filesystem::path(m_outputPath) / "data" / m_name / ("functions/" + name + ".mcfunction");
     std::filesystem::create_directories(path.parent_path());
     std::string output;
     for (auto& statement : body) {
+        m_tempEntries.clear();
         output += generateStatement(statement.get());
+        for (auto& entry : m_tempEntries) {
+            output += "scoreboard objectives remove " + entry + "\n";
+        }
     }
     
     std::ofstream file(path);

@@ -30,6 +30,8 @@ private:
     std::string m_outputPath;
     std::vector<FunctionNode*> m_loadFunctions;
     std::vector<FunctionNode*> m_tickFunctions;
+    std::vector<std::string> m_tempEntries;
+    std::vector<std::string> m_localVarEntries;
     std::unordered_map<std::string, std::string> m_scoreboardNames;
     std::unordered_map<std::string, std::string> m_storageNames;
     std::unordered_map<std::string, std::vector<std::string>> m_functionParams;
@@ -41,6 +43,7 @@ private:
     void generateFunction(FunctionNode* function);
     std::string generateStatement(ASTNode* node);
     ExprResult generateExpression(ASTNode* node);
+    std::string generateCallArgs(const std::string& funcName, const std::vector<std::unique_ptr<ASTNode>>& arguments);
     std::string generateSubFunction(const std::string& name, const std::vector<std::unique_ptr<ASTNode>>& body);
     ConditionResult generateCondition(ASTNode* node);
     void registerFunctions();

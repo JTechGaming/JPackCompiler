@@ -7,6 +7,10 @@ void setBlock(int x, int y, int z, string block) {
     @cmd "setblock {x} {y} {z} {block}";
 }
 
+int add(int a, int b) {
+    return a + b;
+}
+
 @tick
 void onTick() {
     int x = 10;
@@ -28,6 +32,8 @@ void onTick() {
     int py = 64;
     int pz = 10;
     setBlock(px, py, pz, "stone");
+    
+    int result = add(5, 3);
 }
 
 class Player {
