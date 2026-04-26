@@ -19,7 +19,7 @@ struct ConditionResult {
 
 class Codegen {
 public:
-    Codegen(ProgramNode* programNode, std::string name) : m_programNode(programNode), m_name(std::move(name)) {}
+    Codegen(ProgramNode* programNode, std::string name, bool debugMode) : m_programNode(programNode), m_name(std::move(name)), m_debugMode(debugMode) {}
 
     void generate(std::string outputPath);
 
@@ -40,6 +40,7 @@ private:
     std::unordered_map<std::string, std::vector<std::string>> m_functionParamTypes;
     std::unordered_set<std::string> m_intrinsicFunctions;
     int m_counter = 1;
+    bool m_debugMode;
     
     void generateFunction(FunctionNode* function);
     std::string generateStatement(ASTNode* node);
