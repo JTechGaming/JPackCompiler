@@ -8,12 +8,14 @@
 
 #include "json.hpp"
 
+static const std::string FUNCTIONS_DIR = "function";
+
 void Codegen::generate(std::string outputPath) {
     m_outputPath = std::move(outputPath);
     formatPrefix();
     registerFunctions();
     
-    auto functionsPath = std::filesystem::path(m_outputPath) / "data" / m_name / "functions";
+    auto functionsPath = std::filesystem::path(m_outputPath) / "data" / m_name / FUNCTIONS_DIR;
     std::filesystem::create_directories(functionsPath);
     
     generatePackMeta();
@@ -38,6 +40,9 @@ void Codegen::generate(std::string outputPath) {
 }
 
 void Codegen::generateFunction(FunctionNode* function) {
+    m_localVarEntries.clear();
+    auto savedScoreboardNames = m_scoreboardNames;
+    auto savedStorageNames = m_storageNames;
     std::string funcName = function->name;
     std::ranges::transform(funcName, funcName.begin(),
         [](unsigned char c) { return std::tolower(c); });
@@ -47,7 +52,7 @@ void Codegen::generateFunction(FunctionNode* function) {
         [](unsigned char c) { return std::tolower(c); });
     std::string funcRef = nsLower.empty() ? funcName : nsLower + "/" + funcName;
     
-    auto functionPath = std::filesystem::path(m_outputPath) / "data" / m_name / "functions" / (funcRef + ".mcfunction");
+    auto functionPath = std::filesystem::path(m_outputPath) / "data" / m_name / FUNCTIONS_DIR / (funcRef + ".mcfunction");
     std::filesystem::create_directories(functionPath.parent_path());
 
     for (auto& annotation : function->annotations) {
@@ -69,11 +74,13 @@ void Codegen::generateFunction(FunctionNode* function) {
             if (auto* raw = dynamic_cast<RawCommandNode*>(statement.get())) {
                 std::regex pattern("\\{([^}]+)\\}");
                 std::string cmd = std::regex_replace(raw->command, pattern, "$($1)");
-                file << "execute store result storage " + m_name + ":return value int 1 run $" + cmd + "\n";
+                file << "$execute store result storage " + m_name + ":return value int 1 run " + cmd + "\n";
                 file << "return run data get storage " + m_name + ":return value\n";
             }
         }
         file.close();
+        m_scoreboardNames = savedScoreboardNames;
+        m_storageNames = savedStorageNames;
         return;
     }
     if (function->isIntrinsic) {
@@ -86,6 +93,8 @@ void Codegen::generateFunction(FunctionNode* function) {
             }
         }
         file.close();
+        m_scoreboardNames = savedScoreboardNames;
+        m_storageNames = savedStorageNames;
         return; // don't emit normal function body
     }
     
@@ -107,6 +116,8 @@ void Codegen::generateFunction(FunctionNode* function) {
     m_localVarEntries.clear();
     
     file.close();
+    m_scoreboardNames = savedScoreboardNames;
+    m_storageNames = savedStorageNames;
 }
 
 std::string sourceComment(const ASTNode* node) {
@@ -116,14 +127,17 @@ std::string sourceComment(const ASTNode* node) {
 
 std::string Codegen::generateStatement(ASTNode* node) {
     if (auto* variable = dynamic_cast<const VariableNode*>(node)) {
-        if (variable->type.name == "string") {
+        std::string variableTypeName = variable->type.name;
+        std::ranges::transform(variableTypeName, variableTypeName.begin(),
+            [](unsigned char c) { return std::tolower(c); });
+        if (variableTypeName == "string") {
             std::string out = sourceComment(variable);
             m_storageNames[variable->name] = variable->name;
             if (variable->value != nullptr) {
                 if (auto* literal = dynamic_cast<LiteralNode*>(variable->value.get())) {
-                    out = "data modify storage " + m_name + ":vars " + variable->name + " set value \"" + literal->value + "\"\n";
+                    out += "data modify storage " + m_name + ":vars " + variable->name + " set value \"" + literal->value + "\"\n";
                 } else if (auto* ident = dynamic_cast<IdentifierNode*>(variable->value.get())) {
-                    out = "data modify storage " + m_name + ":vars " + variable->name + " set from storage " + m_name + ":vars " + m_storageNames[ident->name] + "\n";
+                    out += "data modify storage " + m_name + ":vars " + variable->name + " set from storage " + m_name + ":vars " + m_storageNames[ident->name] + "\n";
                 }
             }
             return out;
@@ -182,7 +196,7 @@ std::string Codegen::generateStatement(ASTNode* node) {
         m_tempEntries.clear();
         std::string bodyFunc = generateSubFunction(whileUUID, whileNode->body);
         m_tempEntries = savedTemps;
-        auto path = std::filesystem::path(m_outputPath) / "data" / m_name / "functions" / (whileUUID + ".mcfunction");
+        auto path = std::filesystem::path(m_outputPath) / "data" / m_name / FUNCTIONS_DIR / (whileUUID + ".mcfunction");
         std::ofstream file(path, std::ios::app); // append mode
         file << condition.commands;
         file << "execute " + condition.condition + " run function " + bodyFunc + "\n";
@@ -212,10 +226,9 @@ std::string Codegen::generateStatement(ASTNode* node) {
         m_tempEntries.clear();
         std::string bodyFunc = generateSubFunction(forUUID, forNode->body);
         m_tempEntries = savedTemps;
-        auto path = std::filesystem::path(m_outputPath) / "data" / m_name / "functions" / (forUUID + ".mcfunction");
+        auto path = std::filesystem::path(m_outputPath) / "data" / m_name / FUNCTIONS_DIR / (forUUID + ".mcfunction");
         std::ofstream file(path, std::ios::app); // append mode
         file << condition.commands;
-        std::cout << "increment node type: " << typeid(*forNode->increment.get()).name() << "\n";
         file << generateStatement(forNode->increment.get());
         file << "execute " + condition.condition + " run function " + bodyFunc + "\n";
         file.close();
@@ -328,6 +341,23 @@ ExprResult Codegen::generateExpression(ASTNode* node) {
 
         return {.commands = commands, .resultEntry = temp};
     }
+    if (auto* unary = dynamic_cast<UnaryExprNode*>(node)) {
+        if (unary->op == TokenType::MINUS) {
+            ExprResult operand = generateExpression(unary->operand.get());
+            std::string temp = m_prefix + makeUUID();
+            m_tempEntries.emplace_back(temp);
+            std::string commands = operand.commands;
+            commands += "scoreboard objectives add " + temp + " dummy\n";
+            // negate by multiplying by -1
+            std::string negEntry = m_prefix + makeUUID();
+            m_tempEntries.emplace_back(negEntry);
+            commands += "scoreboard objectives add " + negEntry + " dummy\n";
+            commands += "scoreboard players set " + m_prefix + " " + negEntry + " -1\n";
+            commands += "scoreboard players operation " + m_prefix + " " + temp + " = " + m_prefix + " " + operand.resultEntry + "\n";
+            commands += "scoreboard players operation " + m_prefix + " " + temp + " *= " + m_prefix + " " + negEntry + "\n";
+            return {.commands = commands, .resultEntry = temp};
+        }
+    }
     
     return {.commands = "", .resultEntry = ""};
 }
@@ -372,7 +402,12 @@ std::string Codegen::generateCallArgs(const std::string& funcName, const std::ve
 }
 
 std::string Codegen::generateSubFunction(const std::string& name, const std::vector<std::unique_ptr<ASTNode>>& body) {
-    auto path = std::filesystem::path(m_outputPath) / "data" / m_name / ("functions/" + name + ".mcfunction");
+    auto savedScoreboardNames = m_scoreboardNames;
+    auto savedStorageNames = m_storageNames;
+    auto savedLocalVars = m_localVarEntries;
+    m_localVarEntries.clear();
+    
+    auto path = std::filesystem::path(m_outputPath) / "data" / m_name / (FUNCTIONS_DIR + "/" + name + ".mcfunction");
     std::filesystem::create_directories(path.parent_path());
     std::string output;
     for (auto& statement : body) {
@@ -386,6 +421,9 @@ std::string Codegen::generateSubFunction(const std::string& name, const std::vec
     std::ofstream file(path);
     file << output << '\n';
     
+    m_scoreboardNames = savedScoreboardNames;
+    m_storageNames = savedStorageNames;
+    m_localVarEntries = savedLocalVars;
     return m_name + ":" + name;
 }
 
@@ -451,9 +489,11 @@ void Codegen::registerFunction(FunctionNode* fn) {
         std::string uuid = m_prefix + makeUUID();
         m_functionParams[func].emplace_back(uuid);
         m_functionParamNames[func].emplace_back(param->name);
-        m_functionParamTypes[func].emplace_back(param->type.name);
+        std::string paramTypeNameLower = param->type.name;
+        std::ranges::transform(paramTypeNameLower, paramTypeNameLower.begin(),
+            [](unsigned char c) { return std::tolower(c); });
+        m_functionParamTypes[func].emplace_back(paramTypeNameLower);
         m_scoreboardNames[param->name] = uuid;
-        std::cout << "param: " << param->name << " type: " << param->type.name << "\n";
     }
 }
 
@@ -470,7 +510,7 @@ void Codegen::generatePackMeta() const {
 
 void Codegen::generateTickJson() const {
     if (m_tickFunctions.empty()) return;
-    auto path = std::filesystem::path(m_outputPath) / "data/minecraft/tags/functions/tick.json";
+    auto path = std::filesystem::path(m_outputPath) / ("data/minecraft/tags/" + FUNCTIONS_DIR + "/tick.json");
     std::filesystem::create_directories(path.parent_path());
     nlohmann::json json;
     nlohmann::json jsonArray = nlohmann::json::array();
@@ -488,7 +528,7 @@ void Codegen::generateTickJson() const {
 
 void Codegen::generateLoadJson() const {
     if (m_loadFunctions.empty()) return;
-    auto path = std::filesystem::path(m_outputPath) / "data/minecraft/tags/functions/load.json";
+    auto path = std::filesystem::path(m_outputPath) / ("data/minecraft/tags/" + FUNCTIONS_DIR + "/load.json");
     std::filesystem::create_directories(path.parent_path());
     nlohmann::json json;
     nlohmann::json jsonArray = nlohmann::json::array();
@@ -505,7 +545,7 @@ void Codegen::generateLoadJson() const {
 }
 
 std::string Codegen::makeUUID() {
-    return "__" + std::format("{:08X}", m_counter++);
+    return "__" + std::format("{:08x}", m_counter++);
 }
 
 void Codegen::formatPrefix() {

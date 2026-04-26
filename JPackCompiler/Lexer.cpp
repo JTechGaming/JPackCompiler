@@ -142,8 +142,17 @@ void Lexer::skipWhitespace() {
 void Lexer::lexString() {
     std::string result;
     while (current() != '"' && !isAtEnd()) {
-        result += current();
-        advance();
+        if (current() == '\\') {
+            advance(); // consume backslash
+            char escaped = advance();
+            if (escaped == '"') result += '"';
+            else if (escaped == 'n') result += '\n';
+            else if (escaped == 't') result += '\t';
+            else if (escaped == '\\') result += '\\';
+        } else {
+            result += current();
+            advance();
+        }
     }
     if (isAtEnd()) {
         std::cout << "Lexer ERROR: Unclosed string literal at line " << m_tokenLine << "\n";

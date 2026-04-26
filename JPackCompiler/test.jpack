@@ -41,7 +41,7 @@ void onTick() {
     }
     
     // test string variables
-    string msg = "Hello from JPackCompiler!";
+    string msg = "{'text':'Hello!','color':'gold','bold':true}";
     Chat::tellRaw("@a", msg);
     
     // test world manipulation

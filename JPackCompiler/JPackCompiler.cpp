@@ -34,11 +34,11 @@ int main(int argc, char *argv[]){
     
     Lexer lexer(source);
     auto tokens = lexer.tokenize();
-    for (auto token : tokens) {
-        std::cout << "token: " << tokenTypeToString(token.type) << " with value: "
-            << token.value << " at column: "
-            << token.column << " , line: " << token.line << "\n";
-    }
+    // for (auto token : tokens) {
+    //     std::cout << "token: " << tokenTypeToString(token.type) << " with value: "
+    //         << token.value << " at column: "
+    //         << token.column << " , line: " << token.line << "\n";
+    // }
     
     Parser parser(tokens);
     auto program = parser.parse();
@@ -47,7 +47,7 @@ int main(int argc, char *argv[]){
         return 1;
     }
     std::cout << "Declarations: " << program->declarations.size() << "\n";
-    parser.printNode(program.get());
+    //parser.printNode(program.get());
     
     std::string outputPath = argc >= 3 ? argv[argc - 1] : "output";
     
