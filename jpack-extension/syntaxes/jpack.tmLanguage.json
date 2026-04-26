@@ -1,0 +1,154 @@
+{
+    "name": "JPack",
+    "scopeName": "source.jpack",
+    "fileTypes": ["jpack"],
+    "patterns": [
+        {"include": "#comments"},
+        {"include": "#annotations"},
+        {"include": "#keywords"},
+        {"include": "#types"},
+        {"include": "#strings"},
+        {"include": "#numbers"},
+        {"include": "#functions"},
+        {"include": "#operators"},
+        {"include": "#punctuation"}
+    ],
+    "repository": {
+        "comments": {
+            "patterns": [
+                {
+                    "name": "comment.line.double-slash.jpack",
+                    "match": "//.*$"
+                },
+                {
+                    "name": "comment.block.jpack",
+                    "begin": "/\\*",
+                    "end": "\\*/"
+                }
+            ]
+        },
+        "annotations": {
+            "patterns": [
+                {
+                    "name": "entity.name.function.decorator.jpack",
+                    "match": "@(tick|load|intrinsic|returns_command|event|inline)\\b"
+                },
+                {
+                    "name": "entity.name.function.decorator.jpack",
+                    "match": "@cmd\\b"
+                },
+                {
+                    "name": "variable.language.decorator.jpack",
+                    "match": "@[a-zA-Z_][a-zA-Z0-9_]*"
+                }
+            ]
+        },
+        "keywords": {
+            "patterns": [
+                {
+                    "name": "keyword.control.jpack",
+                    "match": "\\b(if|else|while|for|return|break|continue)\\b"
+                },
+                {
+                    "name": "keyword.declaration.jpack",
+                    "match": "\\b(class|struct|enum|namespace)\\b"
+                },
+                {
+                    "name": "keyword.modifier.jpack",
+                    "match": "\\b(public|private)\\b"
+                },
+                {
+                    "name": "constant.language.jpack",
+                    "match": "\\b(true|false)\\b"
+                }
+            ]
+        },
+        "types": {
+            "patterns": [
+                {
+                    "name": "storage.type.jpack",
+                    "match": "\\b(int|float|double|bool|string|void)\\b"
+                }
+            ]
+        },
+        "strings": {
+            "name": "string.quoted.double.jpack",
+            "begin": "\"",
+            "end": "\"",
+            "patterns": [
+                {
+                    "name": "constant.character.escape.jpack",
+                    "match": "\\\\."
+                }
+            ]
+        },
+        "numbers": {
+            "patterns": [
+                {
+                    "name": "constant.numeric.float.jpack",
+                    "match": "\\b[0-9]+\\.[0-9]+f\\b"
+                },
+                {
+                    "name": "constant.numeric.double.jpack",
+                    "match": "\\b[0-9]+\\.[0-9]+\\b"
+                },
+                {
+                    "name": "constant.numeric.integer.jpack",
+                    "match": "\\b[0-9]+\\b"
+                }
+            ]
+        },
+        "functions": {
+            "patterns": [
+                {
+                    "name": "entity.name.function.jpack",
+                    "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)(?=\\s*\\()"
+                },
+                {
+                    "name": "entity.name.namespace.jpack",
+                    "match": "\\b([A-Z][a-zA-Z0-9_]*)(?=::)"
+                }
+            ]
+        },
+        "operators": {
+            "patterns": [
+                {
+                    "name": "keyword.operator.comparison.jpack",
+                    "match": "(==|!=|<=|>=|<|>)"
+                },
+                {
+                    "name": "keyword.operator.logical.jpack",
+                    "match": "(&&|\\|\\||!)"
+                },
+                {
+                    "name": "keyword.operator.arithmetic.jpack",
+                    "match": "(\\+\\+|--|\\+|-|\\*|/|%)"
+                },
+                {
+                    "name": "keyword.operator.assignment.jpack",
+                    "match": "="
+                },
+                {
+                    "name": "keyword.operator.scope.jpack",
+                    "match": "::"
+                }
+            ]
+        },
+        "punctuation": {
+            "patterns": [
+                {
+                    "name": "punctuation.terminator.jpack",
+                    "match": ";"
+                },
+                {
+                    "name": "punctuation.separator.jpack",
+                    "match": ","
+                },
+                {
+                    "name": "punctuation.accessor.jpack",
+                    "match": "\\."
+                }
+            ]
+        }
+    }
+}
