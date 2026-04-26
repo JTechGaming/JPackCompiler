@@ -1,5 +1,6 @@
 ﻿#include "Parser.h"
 
+#include <algorithm>
 #include <iostream>
 #include <utility>
 
@@ -167,6 +168,11 @@ std::unique_ptr<ASTNode> Parser::parseDeclaration() {
 
 std::unique_ptr<FunctionNode> Parser::parseFunctionDecl(std::vector<std::unique_ptr<AnnotationNode>> annotations) {
     FunctionNode function;
+    for (auto& annotation : annotations) {
+        if (annotation->name == "intrinsic") {
+            function.isIntrinsic = true;
+        }
+    }
     function.annotations = std::move(annotations);
     function.returnType = TypeInfo{.name = tokenTypeToString(current().type), .isReference = false};
     advance();
@@ -175,7 +181,8 @@ std::unique_ptr<FunctionNode> Parser::parseFunctionDecl(std::vector<std::unique_
     while (current().type != TokenType::RPAREN) {
         auto parameter = std::make_unique<ParameterNode>();
         // should be something in the tokentype type category
-        std::string name = current().value;
+        std::string name = tokenTypeToString(current().type);
+        std::ranges::transform(name, name.begin(), [](unsigned char c) { return std::tolower(c); });
         advance();
         
         bool isReference = false;
@@ -261,12 +268,26 @@ std::unique_ptr<ASTNode> Parser::parseStatement() {
         case TokenType::DOUBLE:
         case TokenType::BOOL:
         case TokenType::STRING: return parseVariableDecl();
+        case TokenType::AT: {
+            advance(); // consume @
+            std::string directive = expect(TokenType::IDENTIFIER).value;
+            if (directive == "cmd") {
+                auto raw = std::make_unique<RawCommandNode>();
+                raw->command = expect(TokenType::STRING_LITERAL).value;
+                expect(TokenType::SEMICOLON);
+                return raw;
+            }
+            break;
+        }
         default: {
             auto expression = parseExpression();
             expect(TokenType::SEMICOLON);
             return expression;
         }
     }
+    auto expression = parseExpression();
+    expect(TokenType::SEMICOLON);
+    return expression;
 }
 
 std::unique_ptr<ASTNode> Parser::parseIfStatement() {
@@ -424,11 +445,25 @@ std::unique_ptr<ASTNode> Parser::parsePrimary() {
             return literal;
         }
         case TokenType::IDENTIFIER: {
-            if (peek().type == TokenType::LPAREN) {
-                // function
+            // identifier
+            auto identifier = std::make_unique<IdentifierNode>();
+            identifier->name = current().value;
+            advance();
+            
+            // check for postfix ++ or --
+            if (current().type == TokenType::INCREMENT || current().type == TokenType::DECREMENT) {
+                auto unary = std::make_unique<UnaryExprNode>();
+                unary->op = current().type;
+                unary->operand = std::move(identifier);
+                advance();
+                return unary;
+            }
+            
+            // function
+            if (current().type == TokenType::LPAREN) {
                 auto functionCall = std::make_unique<CallNode>();
-                functionCall->name = current().value;
-                advance(2);
+                functionCall->name = identifier->name; // use already-captured name
+                advance(); // consume '('
                 while (current().type != TokenType::RPAREN) {
                     functionCall->arguments.emplace_back(parseExpression());
                     match(TokenType::COMMA);
@@ -436,10 +471,7 @@ std::unique_ptr<ASTNode> Parser::parsePrimary() {
                 advance(); // consume ')'
                 return functionCall;
             }
-            // identifier
-            auto identifier = std::make_unique<IdentifierNode>();
-            identifier->name = current().value;
-            advance();
+            
             return identifier;
         }
         case TokenType::LPAREN: {
@@ -476,11 +508,11 @@ int Parser::getBindingPower(TokenType type) {
         case TokenType::DIVIDE:
         case TokenType::MOD: return 6;
         case TokenType::NOT: return 7;
-        case TokenType::INCREMENT:
-        case TokenType::DECREMENT:
         case TokenType::DOT:
         case TokenType::LPAREN: return 8;
-        case TokenType::RPAREN: return 0;
+        case TokenType::INCREMENT:
+        case TokenType::DECREMENT:
+        case TokenType::RPAREN:
         default: return 0;
     }
 }

@@ -1,7 +1,9 @@
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <string>
 
+#include "Codegen.h"
 #include "Lexer.h"
 #include "Parser.h"
 
@@ -42,4 +44,9 @@ int main(int argc, char *argv[]){
     }
     std::cout << "Declarations: " << program->declarations.size() << "\n";
     parser.printNode(program.get());
+    
+    std::string outputPath = argc >= 3 ? argv[2] : "output";
+    
+    Codegen codegen(program.get(), std::filesystem::path(argv[1]).stem().string());
+    codegen.generate(outputPath);
 }

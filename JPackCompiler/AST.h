@@ -31,6 +31,7 @@ struct FunctionNode : ASTNode {
     std::vector<std::unique_ptr<ParameterNode>> parameters;
     std::vector<std::unique_ptr<ASTNode>> body;
     std::vector<std::unique_ptr<AnnotationNode>> annotations;
+    bool isIntrinsic = false;
 };
 
 struct ClassNode : ASTNode {
@@ -117,4 +118,8 @@ struct MemberAccessNode : ASTNode {
 
 struct ProgramNode : ASTNode {
     std::vector<std::unique_ptr<ASTNode>> declarations;
+};
+
+struct RawCommandNode : ASTNode {
+    std::string command; // the raw command string with {param} placeholders
 };
