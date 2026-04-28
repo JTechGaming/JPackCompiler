@@ -19,6 +19,9 @@ private:
     std::vector<Token> m_tokens;
     size_t m_pos;
     
+    int m_errorCount = 0;
+    static const int MAX_ERRORS = 10;
+    
     Token current() const;
     Token peek(uint8_t offset = 1) const;
     Token advance(uint8_t offset = 1);
@@ -45,4 +48,5 @@ private:
     
     Token expect(TokenType type);
     bool  match (TokenType type);
+    void  synchronize();
 };

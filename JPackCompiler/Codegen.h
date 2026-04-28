@@ -31,6 +31,7 @@ private:
     std::string m_currentNamespace;
     std::vector<FunctionNode*> m_loadFunctions;
     std::vector<FunctionNode*> m_tickFunctions;
+    std::vector<std::pair<FunctionNode*, std::vector<std::string>>> m_eventFunctions;
     std::vector<std::string> m_tempEntries;
     std::vector<std::string> m_localVarEntries;
     std::unordered_map<std::string, std::string> m_scoreboardNames;
@@ -38,7 +39,10 @@ private:
     std::unordered_map<std::string, std::vector<std::string>> m_functionParams;
     std::unordered_map<std::string, std::vector<std::string>> m_functionParamNames;
     std::unordered_map<std::string, std::vector<std::string>> m_functionParamTypes;
+    std::unordered_map<std::string, std::vector<bool>> m_functionParamIsRef;
+    std::unordered_map<std::string, int> m_arraySizes;
     std::unordered_set<std::string> m_intrinsicFunctions;
+    std::unordered_set<std::string> m_refIntrinsicFunctions;
     int m_counter = 1;
     bool m_debugMode;
     
@@ -51,9 +55,9 @@ private:
     void registerFunctions();
     void registerFunction(FunctionNode* fn);
     void generatePackMeta() const;
+    void generateArrayGetHelper(std::string arrayName, int size) const;
     void generateTickJson() const;
     void generateLoadJson() const;
-    std::string makeScoreboardName(const std::string& functionName, const std::string& varName);
-    std::string makeUUID();
+    void generateEventAdvancements() const;
     void formatPrefix();
 };

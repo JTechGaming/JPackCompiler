@@ -43,6 +43,7 @@ namespace World {
     }
     
     //@intrinsic
+    //@returns_command
     //int getBorderDistance() {
     //    @cmd "worldborder get";
     //}
@@ -147,6 +148,54 @@ namespace Player {
     void spectate(string target, string entity) {
         @cmd "spectate {entity} {target}";
     }
+    
+    @intrinsic
+    @ref_intrinsic
+    void getX(string target, int& x) {
+        @cmd "execute store result score {x_player} {x_obj} run data get entity {target} Pos[0] 1";
+    }
+    
+    @intrinsic
+    @ref_intrinsic
+    void getY(string target, int& y) {
+        @cmd "execute store result score {y_player} {y_obj} run data get entity {target} Pos[1] 1";
+    }
+    
+    @intrinsic
+    @ref_intrinsic
+    void getZ(string target, int& z) {
+        @cmd "execute store result score {z_player} {z_obj} run data get entity {target} Pos[2] 1";
+    }
+    
+    @intrinsic
+    @ref_intrinsic
+    void getXFloat(string target, int& x) {
+        @cmd "execute store result score {x_player} {x_obj} run data get entity {target} Pos[0] 1000";
+    }
+    
+    @intrinsic
+    @ref_intrinsic
+    void getYFloat(string target, int& y) {
+        @cmd "execute store result score {y_player} {y_obj} run data get entity {target} Pos[1] 1000";
+    }
+    
+    @intrinsic
+    @ref_intrinsic
+    void getZFloat(string target, int& z) {
+        @cmd "execute store result score {z_player} {z_obj} run data get entity {target} Pos[2] 1000";
+    }
+    
+    @intrinsic
+    @ref_intrinsic
+    void getAttribute(string target, string attribute, int& value) {
+        @cmd "execute store result score {value_player} {value_obj} run attribute {target} {attribute} get";
+    }
+    
+    @intrinsic
+    @ref_intrinsic
+    void getAttributeFloat(string target, string attribute, int& value) {
+        @cmd "execute store result score {value_player} {value_obj} run attribute {target} {attribute} get 1000";
+    }
 }
 
 namespace Chat {
@@ -154,6 +203,16 @@ namespace Chat {
     @intrinsic
     void say(string message) {
         @cmd "say {message}";
+    }
+    
+    @intrinsic
+    void sayInt(int value) {
+        @cmd "say {value}";
+    }
+    
+    @intrinsic
+    void sayFloat(int value) {
+        @cmd "say {value}";
     }
     
     @intrinsic
@@ -187,6 +246,68 @@ namespace Chat {
     }   
 }
 
+namespace Team {
+    @intrinsic
+    void add(string team) {
+        @cmd "team add {team}";
+    }
+
+    @intrinsic
+    void remove(string team) {
+        @cmd "team remove {team}";
+    }
+
+    @intrinsic
+    void join(string team, string target) {
+        @cmd "team join {team} {target}";
+    }
+
+    @intrinsic
+    void leave(string target) {
+        @cmd "team leave {target}";
+    }
+
+    @intrinsic
+    void setColor(string team, string color) {
+        @cmd "team modify {team} color {color}";
+    }
+
+    @intrinsic
+    void setFriendlyFire(string team, string value) {
+        @cmd "team modify {team} friendlyFire {value}";
+    }
+
+    @intrinsic
+    void setDisplayName(string team, string name) {
+        @cmd "team modify {team} displayName {name}";
+    }
+
+    @intrinsic
+    void setPrefix(string team, string prefix) {
+        @cmd "team modify {team} prefix {prefix}";
+    }
+
+    @intrinsic
+    void setSuffix(string team, string suffix) {
+        @cmd "team modify {team} suffix {suffix}";
+    }
+
+    @intrinsic
+    void setCollision(string team, string rule) {
+        @cmd "team modify {team} collisionRule {rule}";
+    }
+
+    @intrinsic
+    void setDeathMessage(string team, string value) {
+        @cmd "team modify {team} deathMessageVisibility {value}";
+    }
+
+    @intrinsic
+    void setNameTag(string team, string value) {
+        @cmd "team modify {team} nametagVisibility {value}";
+    }
+}
+
 namespace Sound {
     // playsound, stopsound
     @intrinsic
@@ -210,6 +331,67 @@ namespace Server {
     @intrinsic
     void gamerule(string rule, string value) {
         @cmd "gamerule {rule} {value}";
+    }
+    
+    @intrinsic
+    void setScore(string player, string objective, int value) {
+        @cmd "scoreboard players set {player} {objective} {value}";
+    }
+    
+    @intrinsic
+    @ref_intrinsic  
+    void getScore(string player, string objective, int& value) {
+        @cmd "execute store result score {value_player} {value_obj} run scoreboard players get {player} {objective}";
+    }
+    
+    @intrinsic
+    void addScore(string player, string objective, int amount) {
+        @cmd "scoreboard players add {player} {objective} {amount}";
+    }
+    
+    @intrinsic
+    void removeScore(string player, string objective, int amount) {
+        @cmd "scoreboard players remove {player} {objective} {amount}";
+    }
+    
+    @intrinsic
+    void addObjective(string objective, string criteria) {
+        @cmd "scoreboard objectives add {objective} {criteria}";
+    }
+    
+    @intrinsic
+    void removeObjective(string objective) {
+        @cmd "scoreboard objectives remove {objective}";
+    }
+}
+
+namespace NBT {
+    @intrinsic
+    @ref_intrinsic
+    void getEntityData(string target, string path, int& value) {
+        @cmd "execute store result score {value_player} {value_obj} run data get entity {target} {path} 1";
+    }
+    
+    @intrinsic
+    @ref_intrinsic
+    void getEntityDataFloat(string target, string path, int& value) {
+        @cmd "execute store result score {value_player} {value_obj} run data get entity {target} {path} 1000";
+    }
+    
+    @intrinsic
+    @ref_intrinsic
+    void getBlockData(int x, int y, int z, string path, int& value) {
+        @cmd "execute store result score {value_player} {value_obj} run data get block {x} {y} {z} {path} 1";
+    }
+    
+    @intrinsic
+    void setEntityData(string target, string path, string value) {
+        @cmd "data modify entity {target} {path} set value {value}";
+    }
+    
+    @intrinsic
+    void setBlockData(int x, int y, int z, string path, string value) {
+        @cmd "data modify block {x} {y} {z} {path} set value {value}";
     }
 }
 

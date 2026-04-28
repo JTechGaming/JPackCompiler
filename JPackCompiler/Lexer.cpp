@@ -109,7 +109,12 @@ void Lexer::nextToken() {
             } else if (isalpha(c) || c == '_') {
                 lexIdentifier(c);
             } else {
-                std::cout << "Lexer ERROR: Unknown character: " << c << "\n";
+                std::cerr << "Lexer ERROR: Unknown character '" << c << "' at line " << m_tokenLine << ", column " << m_tokenColumn << "\n";
+                m_errorCount++;
+                if (m_errorCount >= MAX_ERRORS) {
+                    std::cerr << "Lexer ERROR: too many errors, stopping\n";
+                    throw std::runtime_error("too many lexer errors");
+                }
             }
         }
     }
@@ -129,8 +134,17 @@ void Lexer::skipWhitespace() {
             advance();
             advance();
             while (!(current() == '*' && peek() == '/') && !isAtEnd()) advance();
-            advance();
-            advance();
+            if (isAtEnd()) {
+                std::cerr << "Lexer ERROR: unclosed block comment\n";
+                m_errorCount++;
+                if (m_errorCount >= MAX_ERRORS) {
+                    std::cerr << "Lexer ERROR: too many errors, stopping\n";
+                    throw std::runtime_error("too many lexer errors");
+                }
+            } else {
+                advance();
+                advance();
+            }
             found = true;
         }
         if (!found) {
@@ -155,7 +169,12 @@ void Lexer::lexString() {
         }
     }
     if (isAtEnd()) {
-        std::cout << "Lexer ERROR: Unclosed string literal at line " << m_tokenLine << "\n";
+        std::cerr << "Lexer ERROR: Unclosed string literal at line " << m_tokenLine << ", column " << m_tokenColumn << "\n";
+        m_errorCount++;
+        if (m_errorCount >= MAX_ERRORS) {
+            std::cerr << "Lexer ERROR: too many errors, stopping\n";
+            throw std::runtime_error("too many lexer errors");
+        }
     } else {
         advance(); // consume closing "
     }

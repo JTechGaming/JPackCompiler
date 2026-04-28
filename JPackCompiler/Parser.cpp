@@ -23,8 +23,8 @@ void Parser::printNode(const ASTNode* node, int indent) {
     }
     if (auto* fn = dynamic_cast<const AnnotationNode*>(node)) {
         std::cout << std::string(indent, ' ') << "AnnotationNode: " << fn->name << "\n";
-        if (fn->argument.has_value()) {
-            std::cout << std::string(indent, ' ') << fn->argument.value() << "\n";
+        if (!fn->arguments.empty()) {
+            std::cout << std::string(indent, ' ') << fn->arguments[0] << "\n";
         }
     }
     if (auto* fn = dynamic_cast<const FunctionNode*>(node)) {
@@ -186,6 +186,8 @@ std::unique_ptr<FunctionNode> Parser::parseFunctionDecl(std::vector<std::unique_
     for (auto& annotation : annotations) {
         if (annotation->name == "intrinsic") function.isIntrinsic = true;
         if (annotation->name == "returns_command") function.isReturnsCommand = true;
+        if (annotation->name == "ref_intrinsic") function.isRefIntrinsic = true;
+        if (annotation->name == "revoke") function.isRevoke = true;
     }
     function.annotations = std::move(annotations);
     function.returnType = TypeInfo{.name = tokenTypeToString(current().type), .isReference = false};
@@ -318,6 +320,17 @@ std::unique_ptr<ASTNode> Parser::parseStatement() {
         }
         default: {
             auto expression = parseExpression();
+            if (auto* access = dynamic_cast<ArrayAccessNode*>(expression.get())) {
+                if (current().type == TokenType::EQUAL) {
+                    advance();
+                    auto assign = std::make_unique<ArrayAssignNode>();
+                    assign->name = access->name;
+                    assign->index = std::move(access->index);
+                    assign->value = parseExpression();
+                    expect(TokenType::SEMICOLON);
+                    return assign;
+                }
+            }
             expect(TokenType::SEMICOLON);
             return expression;
         }
@@ -452,11 +465,38 @@ std::unique_ptr<VariableNode> Parser::parseVariableDecl() {
         typeInfo.isReference = true;
         advance();
     }
+    
     variable->type = typeInfo;
     variable->name = expect(TokenType::IDENTIFIER).value;
+    
+    // check for array type
+    if (current().type == TokenType::LBRACK) {
+        advance(); // consume [
+        if (current().type == TokenType::INT_LITERAL) {
+            variable->arraySize = std::stoi(current().value);
+            advance();
+        } else {
+            std::cout << "Parser WARNING: tried to initialize array with dynamic size. This is not yet supported by the compiler!\n";
+        }
+        expect(TokenType::RBRACK);
+        variable->type.isArray = true;
+    }
+    
     if (current().type == TokenType::EQUAL) {
         advance();
-        variable->value = parseExpression();
+        if (variable->type.isArray && current().type == TokenType::LBRACE) {
+            advance(); // consume {
+            while (current().type != TokenType::RBRACE) {
+                if (current().type == TokenType::COMMA) {
+                    advance();
+                    continue;
+                }
+                variable->arrayInitializer.emplace_back(parseExpression());
+            }
+            advance(); // consume }
+        } else {
+            variable->value = parseExpression();
+        }
     }
     expect(TokenType::SEMICOLON);
     return variable;
@@ -470,7 +510,13 @@ std::unique_ptr<AnnotationNode> Parser::parseAnnotation() {
     annotation->name = expect(TokenType::IDENTIFIER).value;
     if (current().type == TokenType::LPAREN) {
         advance();
-        annotation->argument = expect(TokenType::STRING_LITERAL).value;
+        while (current().type != TokenType::RPAREN) {
+            if (current().type == TokenType::COMMA) {
+                advance();
+                continue;
+            }
+            annotation->arguments.emplace_back(advance().value);
+        }
         expect(TokenType::RPAREN);
     }
     return annotation;
@@ -551,6 +597,16 @@ std::unique_ptr<ASTNode> Parser::parsePrimary() {
                 return functionCall;
             }
             
+            // array access
+            if (current().type == TokenType::LBRACK) {
+                auto arrayAccess = std::make_unique<ArrayAccessNode>();
+                arrayAccess->name = identifier->name;
+                advance(); // consume [
+                arrayAccess->index = parseExpression();
+                expect(TokenType::RBRACK);
+                return arrayAccess;
+            }
+            
             return identifier;
         }
         case TokenType::LPAREN: {
@@ -602,7 +658,17 @@ Token Parser::expect(TokenType type) {
     if (current().type == type) {
         return advance();
     }
-    std::cerr << "Parser ERROR: expected: " << tokenTypeToString(type) << ", is: " << tokenTypeToString(current().type) << ", at line: " << current().line << ", column: " << current().column << "\n";
+    std::cerr << "Parser ERROR: expected '" << tokenTypeToString(type) 
+              << "' but found '" << tokenTypeToString(current().type) << "'";
+    if (current().line > 0) {
+        std::cerr << " at line " << current().line << ", column " << current().column;
+    }
+    std::cerr << "\n";
+    m_errorCount++;
+    if (m_errorCount >= MAX_ERRORS) {
+        std::cerr << "Parser ERROR: too many errors, stopping\n";
+        throw std::runtime_error("too many parse errors");
+    }
     return Token{};
 }
 
@@ -612,4 +678,30 @@ bool Parser::match(TokenType type) {
         return true;
     }
     return false;
+}
+
+void Parser::synchronize() {
+    while (!isAtEnd()) {
+        if (current().type == TokenType::SEMICOLON) {
+            advance();
+            return;
+        }
+        switch (current().type) {
+        case TokenType::VOID:
+        case TokenType::INT:
+        case TokenType::FLOAT:
+        case TokenType::DOUBLE:
+        case TokenType::BOOL:
+        case TokenType::STRING:
+        case TokenType::IF:
+        case TokenType::WHILE:
+        case TokenType::FOR:
+        case TokenType::RETURN:
+        case TokenType::NAMESPACE:
+        case TokenType::CLASS:
+            return;
+        default:
+            advance();
+        }
+    }
 }

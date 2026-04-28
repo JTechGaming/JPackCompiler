@@ -1,84 +1,136 @@
-﻿@load
+﻿#include "stdlib.jpack"
+
+void sayTestDelayed() {
+    Chat::say("Test");
+}
+
+@load
 void onLoad() {
     // initialize some global state
-    World::setBlock(0, 64, 0, "minecraft:gold_block");
-    Chat::say("Datapack loaded!");
+    //World::setBlock(0, 64, 0, "minecraft:gold_block");
+    //Chat::say("Datapack loaded!");
+    
+    //Server::schedule(sayTestDelayed(), 40); // schedule 'say test' after 2 seconds
+    
+    //Server::addObjective("counter", "dummy");
+    int testArr[4] = {1, 2, 3, 4};
+    
+    Chat::sayInt(testArr[2]);
 }
 
 @tick
 void onTick() {
     // test basic arithmetic
-    int x = 10;
-    int y = 20;
-    int sum = add(x, y);
-    
+    //int x = 10;
+    //int y = 20;
+    //int sum = add(x, y);
     // test if/else
-    if (sum == 30) {
-        Chat::say("Sum is correct!");
-    } else {
-        Chat::say("Sum is wrong!");
-    }
+    //if (sum == 30) {
+    //    Chat::say("Sum is correct!");
+    //} else {
+    //    Chat::say("Sum is wrong!");
+    //}
     
     // test while loop
-    int counter = 0;
-    while (counter < 5) {
-        counter = counter + 1;
-    }
+    //int counter = 0;
+    //while (counter < 5) {
+    //    counter = counter + 1;
+    //}
+    //Chat::sayInt(counter);
     
     // test for loop
-    int total = 0;
-    for (int i = 0; i < 10; i++) {
-        total = total + i;
-    }
-    
+    //int total = 0;
+    //for (int i = 0; i < 10; i++) {
+    //    total = total + i;
+    //}
     // test nested if
-    if (total > 40) {
-        if (total > 44) {
-            Chat::say("Total is 45!");
-        } else {
-            Chat::say("Total is between 41 and 44");
-        }
-    }
+    //if (total > 40) {
+    //    if (total > 44) {
+    //        Chat::say("Total is 45!");
+    //    } else {
+    //        Chat::say("Total is between 41 and 44");
+    //    }
+    //}
     
     // test string variables
-    string msg = "{'text':'Hello!','color':'gold','bold':true}";
-    Chat::tellRaw("@a", msg);
+    //string msg = "{'text':'Hello!','color':'gold','bold':true}";
+    //Chat::tellRaw("@a", msg);
     
     // test world manipulation
-    int bx = 5;
-    int by = 64;
-    int bz = 5;
-    World::setBlock(bx, by, bz, "minecraft:diamond_block");
-    World::fill(0, 60, 0, 10, 60, 10, "minecraft:stone");
+    //int bx = 5;
+    //int by = 105;
+    //int bz = 5;
+    //World::setBlock(bx, by, bz, "minecraft:diamond_block");
+    //World::fill(0, 100, 0, 10, 100, 10, "minecraft:stone");
     
     // test entity stuff
-    Entity::summon("minecraft:creeper", 0, 64, 0);
+    //Entity::summon("minecraft:creeper", 0, 150, 0);
     
     // test math
-    int absVal = Math::abs(-5);
-    int minVal = Math::min(10, 20);
-    int maxVal = Math::max(10, 20);
-    int rng = Math::random(1, 100);
+    //int absVal = Math::abs(-5);
+    //Chat::sayInt(absVal);
+    
+    //int minVal = Math::min(10, 20);
+    //Chat::sayInt(minVal);
+    
+    //int maxVal = Math::max(10, 20);
+    //Chat::sayInt(maxVal);
+    
+    //int rng = Math::random(1, 100);
+    //Chat::sayInt(rng);
     
     // test player stuff
-    Player::gamemode("@a", "survival");
-    Player::give("@a", "minecraft:diamond", 1);
+    //Player::gamemode("@a", "survival");
+    //Player::give("@a", "minecraft:diamond", 1);
     
     // test sound
-    Sound::play("minecraft:entity.player.levelup", "@a", 0, 64, 0);
+    //Sound::play("minecraft:entity.player.levelup", "@a", bx, by, bz);
     
     // test title
-    Chat::title("@a", "Welcome!");
-    Chat::subtitle("@a", "This datapack works!");
+    //Chat::title("@a", "{\"text\":\"Welcome!\"}");
+    //Chat::subtitle("@a", "{\"text\":\"This datapack works!\"}");
     
     // test border
-    World::setBorderCenter(0, 0);
-    World::setBorderDistance(1000);
+    //World::setBorderCenter(0, 0);
+    //World::setBorderDistance(1000.0f);
     
     // test weather
-    Server::gamerule("doDaylightCycle", "false");
-    Server::gamerule("doWeatherCycle", "false");
+    //Server::gamerule("doDaylightCycle", "false");
+    //Server::gamerule("doWeatherCycle", "false");
+    
+    //int px = 0;
+    //int py = 0;
+    //int pz = 0;
+    //Player::getX("@p", px);
+    //Player::getY("@p", py);
+    //Player::getZ("@p", pz);
+    //World::setBlock(px, py + 2, pz, "minecraft:diamond_block");
+    
+    //int health = 0;
+    //Player::getAttribute("@p", "minecraft:max_health", health);
+    //Chat::sayInt(health);
+    
+    //Server::addScore("test", "counter", 1);
+    //int count = 0;
+    //Server::getScore("test", "counter", count);
+    
+    //Chat::say("Count:");
+    //Chat::sayInt(count);
 }
+
+@event("minecraft:player_killed_entity", "{\"entity\":{\"type\":\"minecraft:zombie\"}}")
+@revoke
+void onZombieKill() {
+    Chat::say("You killed a zombie!");
+    Player::give("@s", "minecraft:rotten_flesh", 1);
+}
+
+//@event("minecraft:player_killed_entity", "{\"entity\":{\"type\":\"minecraft:skeleton\"}}")
+//@revoke
+//void onSkeletonKill() {
+//    Chat::say("You killed a skeleton!");
+//    Player::give("@s", "minecraft:bone", 1);
+//}
 
 int add(int a, int b) {
     return a + b;

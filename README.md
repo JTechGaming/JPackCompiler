@@ -202,6 +202,41 @@ int random(int min, int max) {
 }
 ```
 
+For intrinsics that write back to a caller variable via a reference parameter, use `@ref_intrinsic`. Reference parameters are passed as two macro variables: `{paramName_player}` for the scoreboard player name and `{paramName_obj}` for the scoreboard objective name.
+
+```
+@intrinsic
+@ref_intrinsic
+void getX(string target, int& x) {
+    @cmd "execute store result score {x_player} {x_obj} run data get entity {target} Pos[0] 1";
+}
+```
+
+Called as:
+
+```
+int px = 0;
+Player::getX("@p", px);
+```
+
+### Passing a function reference to an intrinsic
+
+When a string parameter of an intrinsic receives a function call expression, the compiler extracts the function path at compile time instead of evaluating the call. This is used with `Server::schedule`:
+
+```
+Server::schedule(Chat::say("Test"), 40);
+```
+
+This compiles to scheduling `namespace:chat/say` to run after 40 ticks. Note that the arguments to the inner call are discarded — only the function path is used. This means the scheduled function must be a zero-argument function or a wrapper function that has the desired behaviour baked in. So the previous example would not work. Instead, you have to do something like this:
+
+```
+void announceWinner() {
+    Chat::say("The winner has been decided!");
+}
+
+Server::schedule(announceWinner(), 200);
+```
+
 ### Comments
 
 ```
@@ -223,21 +258,52 @@ void increment(int& value) {
 
 ## Standard library
 
-The standard library is provided as `stdlib.jpack` and should be passed as an input file before your own source files. It provides the following namespaces:
+The standard library is provided as `stdlib.jpack` and should be passed as an input file after your own source file.
 
-**World** — setBlock, setBlockMode, fill, clone, setBorderCenter, setBorderDistance, addBorderDistance, setBorderDistanceOverTime, addBorderDistanceOverTime
+**World** — setBlock, setBlockMode, fill, setBorderCenter, setBorderDistance, addBorderDistance, setBorderDistanceOverTime, addBorderDistanceOverTime
 
 **Entity** — summon, kill, tag, removeTag, effect, clearEffect, teleport, damage, ride
 
-**Player** — gamemode, give, clear, kick, addExperience, setExperience, addLevels, advancement, recipe, spectate
+**Player** — gamemode, give, clear, kick, addExperience, setExperience, addLevels, advancement, recipe, spectate, getX, getY, getZ, getXFloat, getYFloat, getZFloat, getAttribute, getAttributeFloat
 
-**Chat** — say, tellRaw, msg, teamMsg, title, subtitle, actionbar
+**Chat** — say, sayInt, tellRaw, msg, teamMsg, title, subtitle, actionbar
 
 **Sound** — play, stop
 
-**Server** — schedule, gamerule
+**Server** — schedule, gamerule, addObjective, removeObjective, setScore, getScore, addScore, removeScore
 
 **Math** — abs, min, max, random
+
+**NBT** — getEntityData, getEntityDataFloat, getBlockData, setEntityData, setBlockData
+
+**Team** — add, remove, join, leave, setColor, setFriendlyFire, setDisplayName, setPrefix, setSuffix, setCollision, setDeathMessage, setNameTag
+
+### Player position
+
+`Player::getX`, `Player::getY`, and `Player::getZ` return the integer block coordinate of the target entity. `Player::getXFloat`, `Player::getYFloat`, and `Player::getZFloat` return the coordinate scaled by 1000 to match the float fixed-point system, giving sub-block precision.
+
+```
+int px = 0;
+int py = 0;
+int pz = 0;
+Player::getX("@p", px);
+Player::getY("@p", py);
+Player::getZ("@p", pz);
+World::setBlock(px, py + 2, pz, "minecraft:diamond_block");
+```
+
+### Score manipulation
+
+`Server::addObjective` and `Server::removeObjective` manage scoreboard objectives. `Server::setScore`, `Server::getScore`, `Server::addScore`, and `Server::removeScore` manipulate player scores on existing objectives. This is the primary mechanism for persistent state that survives across ticks.
+
+```
+// in onLoad:
+Server::addObjective("kills", "playerKillCount");
+
+// in onTick:
+int kills = 0;
+Server::getScore("@p", "kills", kills);
+```
 
 ## Generated output
 
@@ -283,4 +349,5 @@ The extension provides highlighting for keywords, types, annotations, string lit
 - The `@event` annotation for advancement-based event triggers is not yet implemented.
 - Recursive functions work but share parameter scoreboard entries, so a function calling itself will overwrite its own parameters before the recursive call completes.
 - Classes and structs are parsed and represented in the AST but are not yet implemented in codegen. Enums are similarly parsed but not yet compiled.
-- The codegen is known to struggle with certain target selectors, like @a\[some condition\]
+- Target selectors containing conditions such as `@a[tag=something]` may not work correctly in all cases due to how curly braces are handled in string interpolation.
+- `Server::schedule` only works correctly with zero-argument functions or wrapper functions. Arguments passed to the inner function call are discarded at compile time.

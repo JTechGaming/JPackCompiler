@@ -19,6 +19,9 @@ private:
     
     std::vector<Token> m_tokens;
     
+    int m_errorCount = 0;
+    static const int MAX_ERRORS = 10;
+    
     char current() const;
     char peek() const;
     char advance();

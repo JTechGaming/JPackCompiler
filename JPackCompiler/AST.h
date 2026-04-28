@@ -15,6 +15,7 @@ struct ASTNode {
 struct TypeInfo {
     std::string name;
     bool isReference = false; // for int&
+    bool isArray = false;
 };
 
 struct ParameterNode : ASTNode {
@@ -24,7 +25,7 @@ struct ParameterNode : ASTNode {
 
 struct AnnotationNode : ASTNode {
     std::string name;
-    std::optional<std::string> argument; // for instance @event("minecraft:player_hurt")
+    std::vector<std::string> arguments; // for instance @event("minecraft:player_hurt")
 };
 
 struct FunctionNode : ASTNode {
@@ -35,6 +36,8 @@ struct FunctionNode : ASTNode {
     std::vector<std::unique_ptr<AnnotationNode>> annotations;
     bool isIntrinsic = false;
     bool isReturnsCommand = false;
+    bool isRefIntrinsic = false;
+    bool isRevoke = false;
 };
 
 struct ClassNode : ASTNode {
@@ -61,6 +64,25 @@ struct EnumNode : ASTNode {
 struct VariableNode : ASTNode {
     TypeInfo type;
     std::string name;
+    std::unique_ptr<ASTNode> value;
+    std::vector<std::unique_ptr<ASTNode>> arrayInitializer;
+    int arraySize;
+};
+
+struct ArrayDeclNode : ASTNode {
+    TypeInfo elementType;
+    std::string name;
+    std::vector<std::unique_ptr<ASTNode>> initializer;
+};
+
+struct ArrayAccessNode : ASTNode {
+    std::string name;
+    std::unique_ptr<ASTNode> index;
+};
+
+struct ArrayAssignNode : ASTNode {
+    std::string name;
+    std::unique_ptr<ASTNode> index;
     std::unique_ptr<ASTNode> value;
 };
 
