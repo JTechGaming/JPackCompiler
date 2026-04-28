@@ -13,9 +13,9 @@ void onLoad() {
     //Server::schedule(sayTestDelayed(), 40); // schedule 'say test' after 2 seconds
     
     //Server::addObjective("counter", "dummy");
-    int testArr[4] = {1, 2, 3, 4};
+    //int testArr[4] = {1, 2, 3, 4};
     
-    Chat::sayInt(testArr[2]);
+    //Chat::sayInt(testArr[2]);
 }
 
 @tick

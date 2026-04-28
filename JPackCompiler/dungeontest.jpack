@@ -1,0 +1,49 @@
+#include "stdlib.jpack"
+
+@dimension("void_world")
+@structure("dungeontest:dungeon_start", "dungeontest:dungeon", "dungeontest:room", "7")
+@templatePool("dungeontest:dungeon", [
+    ("dungeontest:anchor", 1),
+    ("dungeontest:4way", 3),
+    ("dungeontest:3way", 2)
+])
+void onVoidWorldLoad() {
+    Chat::say("Dungeon generated!");
+}
+
+@load
+void onLoad() {
+    Entity::kill("@e[type=minecraft:marker,tag=portal_center]")
+    Entity::summon("minecraft:marker", 0, 100, 0);
+    Entity::summon("minecraft:armor_stand", 0, 100, 0);
+    Entity::tag("@e[type=minecraft:marker]", "portal_center");
+}
+
+void placeDungeonForPlayer() {
+    World::placeJigsaw("dungeontest:dungeon", "dungeontest:start", 20, 0, 100, 0);
+    Entity::removeTag("@s", "entering_void");
+    Entity::clearEffect("@s");
+}
+
+void schedulePlacement() {
+    Server::executeAsInDimension("@a[tag=entering_void]", "dungeontest:void_world", placeDungeonForPlayer());
+}
+
+void teleportNearbyToVoid() {
+    int close = Entity::exists("@s[distance=..2]");
+    if (close == 1) {
+        Entity::tag("@s", "entering_void");
+        Entity::effect("@s", "minecraft:darkness", 2, 255);
+        Entity::effect("@s", "minecraft:levitation", 2, 0);
+        Entity::teleportToDimension("@s", "dungeontest:void_world", 5, 100, 0);
+        Server::schedule(schedulePlacement(), 20);
+    }
+}
+
+@tick
+void onTick() {
+    int near = Entity::existsAt("@e[tag=portal_center,limit=1]", "@a[distance=..2]");
+    if (near == 1) {
+        Server::executeAsAt("@a", "@e[tag=portal_center,limit=1]", teleportNearbyToVoid());
+    }
+}

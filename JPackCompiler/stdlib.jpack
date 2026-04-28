@@ -47,6 +47,27 @@ namespace World {
     //int getBorderDistance() {
     //    @cmd "worldborder get";
     //}
+    
+    @intrinsic
+    @store_result_intrinsic  
+    int blockMatches(int x, int y, int z, string block) {
+        @cmd "execute store result storage {__ns}:return value int 1 if block {x} {y} {z} {block}";
+    }
+    
+    @intrinsic
+    void placeStructure(string structure, int x, int y, int z) {
+        @cmd "place structure {structure} {x} {y} {z}";
+    }
+    
+    @intrinsic
+    void placeJigsaw(string pool, string target, int maxDepth, int x, int y, int z) {
+        @cmd "place jigsaw {pool} {target} {maxDepth} {x} {y} {z}";
+    }
+    
+    @intrinsic
+    void placeJigsawInDimension(string dimension, string pool, string target, int maxDepth, int x, int y, int z) {
+        @cmd "execute in {dimension} run place jigsaw {pool} {target} {maxDepth} {x} {y} {z}";
+    }
 }
 
 namespace Entity {
@@ -87,6 +108,11 @@ namespace Entity {
     }
     
     @intrinsic
+    void teleportToDimension(string target, string dimension, int x, int y, int z) {
+        @cmd "execute in {dimension} run tp {target} {x} {y} {z}";
+    }
+    
+    @intrinsic
     void damage(string target, int amount) {
         @cmd "damage {target} {amount}";
     }
@@ -94,6 +120,30 @@ namespace Entity {
     @intrinsic
     void ride(string target, string vehicle) {
         @cmd "ride {target} mount {vehicle}";
+    }
+    
+    @intrinsic
+    @returns_command
+    int exists(string selector) {
+        @cmd "execute if entity {selector}";
+    }
+    
+    @intrinsic
+    @store_result_intrinsic
+    int existsAt(string executor, string selector) {
+        @cmd "execute at {executor} store result storage {__ns}:return value int 1 if entity {selector}";
+    }
+    
+    @intrinsic
+    @store_result_intrinsic
+    int existsIn(string dimension, string selector) {
+        @cmd "execute in {dimension} if entity {selector}";
+    }
+    
+    @intrinsic
+    @store_result_intrinsic
+    int existsAtBlock(int x, int y, int z, string selector) {
+        @cmd "execute at {selector} store result storage {__ns}:return value int 1 positioned {x} {y} {z} if entity {selector}";
     }
 }
 
@@ -362,6 +412,21 @@ namespace Server {
     @intrinsic
     void removeObjective(string objective) {
         @cmd "scoreboard objectives remove {objective}";
+    }
+    
+    @intrinsic
+    void executeInDimension(string dimension, string function) {
+        @cmd "execute in {dimension} run function {function}";
+    }
+    
+    @intrinsic
+    void executeAsInDimension(string target, string dimension, string function) {
+        @cmd "execute as {target} in {dimension} run function {function}";
+    }
+    
+    @intrinsic
+    void executeAsAt(string asTarget, string atTarget, string function) {
+        @cmd "execute as {asTarget} at {atTarget} run function {function}";
     }
 }
 

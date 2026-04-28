@@ -45,7 +45,7 @@ private:
     std::unordered_set<std::string> m_refIntrinsicFunctions;
     int m_counter = 1;
     bool m_debugMode;
-    
+
     void generateFunction(FunctionNode* function);
     std::string generateStatement(ASTNode* node);
     ExprResult generateExpression(ASTNode* node);
@@ -56,6 +56,10 @@ private:
     void registerFunction(FunctionNode* fn);
     void generatePackMeta() const;
     void generateArrayGetHelper(std::string arrayName, int size) const;
+    void generateTemplatePool(const std::string& poolName, const std::vector<TemplatePoolEntry>& entries) const;
+    void generateStructure(const std::vector<std::string>& arguments) const;
+    void generateStructureSet(const std::vector<std::string>& arguments) const;
+    void generateDimension(const std::string& dimensionName, std::string& dimensionTypeJson, std::string& dimensionGeneratorJson) const;
     void generateTickJson() const;
     void generateLoadJson() const;
     void generateEventAdvancements() const;

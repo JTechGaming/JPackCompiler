@@ -169,6 +169,7 @@
     <ClInclude Include="Token.h" />
   </ItemGroup>
   <ItemGroup>
+    <Content Include="dungeontest.jpack" />
     <Content Include="statsTracker.jpack" />
     <Content Include="stdlib.jpack" />
     <Content Include="test.jpack" />

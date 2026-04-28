@@ -23,9 +23,15 @@ struct ParameterNode : ASTNode {
     std::string name;
 };
 
+struct TemplatePoolEntry {
+    std::string location;
+    int weight;
+};
+
 struct AnnotationNode : ASTNode {
     std::string name;
     std::vector<std::string> arguments; // for instance @event("minecraft:player_hurt")
+    std::vector<TemplatePoolEntry> poolEntries;
 };
 
 struct FunctionNode : ASTNode {
@@ -36,6 +42,7 @@ struct FunctionNode : ASTNode {
     std::vector<std::unique_ptr<AnnotationNode>> annotations;
     bool isIntrinsic = false;
     bool isReturnsCommand = false;
+    bool isStoreResultIntrinsic = false;
     bool isRefIntrinsic = false;
     bool isRevoke = false;
 };

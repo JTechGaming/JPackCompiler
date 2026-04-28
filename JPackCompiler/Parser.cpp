@@ -186,6 +186,7 @@ std::unique_ptr<FunctionNode> Parser::parseFunctionDecl(std::vector<std::unique_
     for (auto& annotation : annotations) {
         if (annotation->name == "intrinsic") function.isIntrinsic = true;
         if (annotation->name == "returns_command") function.isReturnsCommand = true;
+        if (annotation->name == "store_result_intrinsic") function.isStoreResultIntrinsic = true;
         if (annotation->name == "ref_intrinsic") function.isRefIntrinsic = true;
         if (annotation->name == "revoke") function.isRevoke = true;
     }
@@ -511,6 +512,20 @@ std::unique_ptr<AnnotationNode> Parser::parseAnnotation() {
     if (current().type == TokenType::LPAREN) {
         advance();
         while (current().type != TokenType::RPAREN) {
+            if (current().type == TokenType::LBRACK) { // templatepool
+                advance(); // consume [
+                while (current().type != TokenType::RBRACK) {
+                    if (current().type == TokenType::COMMA) { advance(); continue; }
+                    expect(TokenType::LPAREN);
+                    std::string location = expect(TokenType::STRING_LITERAL).value;
+                    expect(TokenType::COMMA);
+                    int weight = std::stoi(expect(TokenType::INT_LITERAL).value);
+                    expect(TokenType::RPAREN);
+                    annotation->poolEntries.emplace_back(TemplatePoolEntry{location, weight});
+                }
+                advance(); // consume ]
+                continue;
+            }
             if (current().type == TokenType::COMMA) {
                 advance();
                 continue;

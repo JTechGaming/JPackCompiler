@@ -61,6 +61,10 @@ void Codegen::generateFunction(FunctionNode* function) {
     auto functionPath = std::filesystem::path(m_outputPath) / "data" / m_name / FUNCTIONS_DIR / (funcRef + ".mcfunction");
     std::filesystem::create_directories(functionPath.parent_path());
 
+    std::string dimensionName;
+    std::string dimensionTypeJson;
+    std::string dimensionGeneratorJson;
+    
     for (auto& annotation : function->annotations) {
         if (annotation->name == "tick") {
             m_tickFunctions.emplace_back(function);
@@ -73,6 +77,31 @@ void Codegen::generateFunction(FunctionNode* function) {
                 m_eventFunctions.emplace_back(function, annotation->arguments);
             }
         }
+        
+        if (annotation->name == "dimension" && !annotation->arguments.empty()) {
+            dimensionName = annotation->arguments[0];
+        }
+        if (annotation->name == "dimensionType" && !annotation->arguments.empty()) {
+            dimensionTypeJson = annotation->arguments[0];
+        }
+        if (annotation->name == "dimensionGenerator" && !annotation->arguments.empty()) {
+            dimensionGeneratorJson = annotation->arguments[0];
+        }
+        
+        if (annotation->name == "templatePool" && !annotation->arguments.empty()) {
+            generateTemplatePool(annotation->arguments[0], annotation->poolEntries);
+        }
+        if (annotation->name == "structure" && !annotation->arguments.empty()) {
+            generateStructure(annotation->arguments);
+        }
+        if (annotation->name == "structureSet" && !annotation->arguments.empty()) {
+            generateStructureSet(annotation->arguments);
+        }
+    }
+    
+    if (!dimensionName.empty()) {
+        generateDimension(dimensionName, dimensionTypeJson, dimensionGeneratorJson);
+        m_loadFunctions.emplace_back(function);
     }
     
     std::ofstream file(functionPath);
@@ -80,6 +109,23 @@ void Codegen::generateFunction(FunctionNode* function) {
     file << "# Generated from function '" + function->name + "' [line " + 
         std::to_string(function->sourceLine) + "]\n\n";
     
+    if (function->isIntrinsic && function->isStoreResultIntrinsic) {
+        for (auto& statement : function->body) {
+            if (auto* raw = dynamic_cast<RawCommandNode*>(statement.get())) {
+                std::regex pattern("\\{([a-zA-Z_][a-zA-Z0-9_]*)\\}");
+                std::string cmd = std::regex_replace(raw->command, pattern, "$($1)");
+                // replace __ns placeholder with actual namespace
+                std::regex nsPattern("\\$\\(__ns\\)");
+                cmd = std::regex_replace(cmd, nsPattern, m_name);
+                file << "$" + cmd + "\n";
+                file << "return run data get storage " + m_name + ":return value\n";
+            }
+        }
+        file.close();
+        m_scoreboardNames = savedScoreboardNames;
+        m_storageNames = savedStorageNames;
+        return;
+    }
     if (function->isIntrinsic && function->isReturnsCommand) {
         for (auto& statement : function->body) {
             if (auto* raw = dynamic_cast<RawCommandNode*>(statement.get())) {
@@ -354,18 +400,24 @@ ExprResult Codegen::generateExpression(ASTNode* node) {
         std::string funcName = call->name;
         std::ranges::transform(funcName, funcName.begin(),
             [](unsigned char c) { return std::tolower(c); });
-        
+    
         std::string namespaceName = call->namespaceName;
         std::ranges::transform(namespaceName, namespaceName.begin(),
             [](unsigned char c) { return std::tolower(c); });
         std::string funcRef = call->namespaceName.empty() ? funcName : (namespaceName + "/" + funcName);
-        
+    
         std::string out;
         std::string temp = m_prefix + "__tmp_" + std::format("{:04x}", m_counter++);
         m_tempEntries.emplace_back(temp);
         out += "scoreboard objectives add " + temp + " dummy\n";
         out += generateCallArgs(funcRef, call->arguments);
-        out += "execute store result score " + m_prefix + " " + temp + " run function " + m_name + ":" + funcRef + "\n";
+    
+        if (m_intrinsicFunctions.contains(funcRef)) {
+            out += "function " + m_name + ":" + funcRef + " with storage " + m_name + ":args\n";
+            out += "execute store result score " + m_prefix + " " + temp + " run data get storage " + m_name + ":return value\n";
+        } else {
+            out += "execute store result score " + m_prefix + " " + temp + " run function " + m_name + ":" + funcRef + "\n";
+        }
         return {.commands = out, .resultEntry = temp};
     }
     if (auto* binary = dynamic_cast<BinaryExprNode*>(node)) {
@@ -614,6 +666,145 @@ void Codegen::generateArrayGetHelper(std::string arrayName, int size) const {
     }
     getFile << "scoreboard objectives remove " + m_prefix + "__cmp\n";
     getFile << "scoreboard objectives remove " + m_prefix + "__idx_arg\n";
+}
+
+void Codegen::generateTemplatePool(const std::string& poolName, const std::vector<TemplatePoolEntry>& entries) const {
+    std::string namespacePart = poolName;
+    std::string pathPart = poolName;
+    size_t colon = poolName.find(':');
+    if (colon != std::string::npos) {
+        namespacePart = poolName.substr(0, colon);
+        pathPart = poolName.substr(colon + 1);
+    }
+    
+    auto path = std::filesystem::path(m_outputPath) / "data" / namespacePart / "worldgen" / "template_pool" / (pathPart + ".json");
+    std::filesystem::create_directories(path.parent_path());
+    
+    nlohmann::json json;
+    json["fallback"] = "minecraft:empty";
+    json["elements"] = nlohmann::json::array();
+    
+    for (const auto& entry : entries) {
+        nlohmann::json element;
+        element["weight"] = entry.weight;
+        element["element"]["element_type"] = "minecraft:single_pool_element";
+        element["element"]["location"] = entry.location;
+        element["element"]["projection"] = "rigid";
+        element["element"]["processors"] = "minecraft:empty";
+        json["elements"].push_back(element);
+    }
+    
+    std::ofstream file(path);
+    file << std::setw(4) << json << '\n';
+}
+
+void Codegen::generateStructure(const std::vector<std::string>& arguments) const {
+    const std::string& structureName = arguments[0];
+    std::string startPool = arguments[1];
+    std::string startJigsawName = arguments[2];
+    int size = std::stoi(arguments[3]);
+    std::string namespacePart = structureName;
+    std::string pathPart = structureName;
+    size_t colon = structureName.find(':');
+    if (colon != std::string::npos) {
+        namespacePart = structureName.substr(0, colon);
+        pathPart = structureName.substr(colon + 1);
+    }
+    
+    auto path = std::filesystem::path(m_outputPath) / "data" / namespacePart / "worldgen" / "structure" / (pathPart + ".json");
+    std::filesystem::create_directories(path.parent_path());
+    
+    nlohmann::json json;
+    json["type"] = "minecraft:jigsaw";
+    json["start_pool"] = startPool;
+    json["size"] = size;
+    json["max_distance_from_center"] = 80;
+    json["use_expansion_hack"] = false;
+    json["start_jigsaw_name"] = startJigsawName;
+    json["step"] = "surface_structures";
+    json["spawn_overrides"] = nlohmann::json::object();
+    json["start_height"]["absolute"] = 0;
+    json["biomes"] = "#minecraft:is_overworld";
+    
+    std::ofstream file(path);
+    file << std::setw(4) << json << '\n';
+}
+
+void Codegen::generateStructureSet(const std::vector<std::string>& arguments) const {
+    const std::string& setName = arguments[0];
+    int spacing = std::stoi(arguments[1]);
+    int separation = std::stoi(arguments[2]);
+    
+    std::string namespacePart = setName;
+    std::string pathPart = setName;
+    size_t colon = setName.find(':');
+    if (colon != std::string::npos) {
+        namespacePart = setName.substr(0, colon);
+        pathPart = setName.substr(colon + 1);
+    }
+    
+    auto path = std::filesystem::path(m_outputPath) / "data" / namespacePart / "worldgen" / "structure_set" / (pathPart + ".json");
+    std::filesystem::create_directories(path.parent_path());
+    
+    nlohmann::json json;
+    json["structures"] = nlohmann::json::array();
+    nlohmann::json entry;
+    entry["structure"] = setName;
+    entry["weight"] = 1;
+    json["structures"].push_back(entry);
+    json["placement"]["type"] = "minecraft:random_spread";
+    json["placement"]["spacing"] = spacing;
+    json["placement"]["separation"] = separation;
+    json["placement"]["salt"] = 12345;
+    
+    std::ofstream file(path);
+    file << std::setw(4) << json << '\n';
+}
+
+void Codegen::generateDimension(const std::string& dimensionName, std::string& dimensionTypeJson, std::string& dimensionGeneratorJson) const {
+    auto typePath = std::filesystem::path(m_outputPath) / "data" / m_name / "dimension_type" / (dimensionName + ".json");
+    std::filesystem::create_directories(typePath.parent_path());
+    auto defPath = std::filesystem::path(m_outputPath) / "data" / m_name / "dimension" / (dimensionName + ".json");
+    std::filesystem::create_directories(defPath.parent_path());
+    
+    if (dimensionTypeJson.empty()) {
+        dimensionTypeJson = "{"
+            "\"ultrawarm\": false,"
+            "\"natural\": true,"
+            "\"has_skylight\": true,"
+            "\"has_ceiling\": false,"
+            "\"ambient_light\": 0.0,"
+            "\"bed_works\": false,"
+            "\"respawn_anchor_works\": false,"
+            "\"has_raids\": true,"
+            "\"piglin_safe\": false,"
+            "\"monster_spawn_block_light_limit\": 0,"
+            "\"monster_spawn_light_level\": 7,"
+            "\"height\": 256,"
+            "\"min_y\": 0,"
+            "\"logical_height\": 256,"
+            "\"coordinate_scale\": 1.0,"
+            "\"infiniburn\": \"#minecraft:infiniburn_overworld\","
+            "\"effects\": \"minecraft:overworld\""
+        "}";
+    }
+    if (dimensionGeneratorJson.empty()) {
+        dimensionGeneratorJson = "{"
+            "\"type\": \"" + m_name + ":" + dimensionName + "\","
+            "\"generator\": {\"type\": \"minecraft:flat\","
+            "\"settings\": {\"layers\": [{\"block\": \"minecraft:air\", \"height\": 1}],"
+            "\"biome\": \"minecraft:the_void\"}}}";
+    }
+    
+    nlohmann::json typeJson = nlohmann::json::parse(dimensionTypeJson);
+    std::ofstream typeFile(typePath);
+    typeFile << std::setw(4) << typeJson << '\n';
+    typeFile.close();
+    
+    nlohmann::json defJson = nlohmann::json::parse(dimensionGeneratorJson);
+    std::ofstream defFile(defPath);
+    defFile << std::setw(4) << defJson << '\n';
+    defFile.close();
 }
 
 void Codegen::generateTickJson() const {
