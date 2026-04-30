@@ -428,6 +428,18 @@ namespace Server {
     void executeAsAt(string asTarget, string atTarget, string function) {
         @cmd "execute as {asTarget} at {atTarget} run function {function}";
     }
+    
+    @intrinsic
+    @store_result_intrinsic
+    int checkPredicate(string predicate) {
+        @cmd "execute store result storage {__ns}:return value int 1 if predicate {predicate}";
+    }
+    
+    @intrinsic
+    @store_result_intrinsic
+    int checkPredicateAs(string target, string predicate) {
+        @cmd "execute as {target} store result storage {__ns}:return value int 1 if predicate {predicate}";
+    }
 }
 
 namespace NBT {

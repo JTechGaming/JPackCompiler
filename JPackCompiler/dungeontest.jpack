@@ -13,7 +13,7 @@ void onVoidWorldLoad() {
 
 @load
 void onLoad() {
-    Entity::kill("@e[type=minecraft:marker,tag=portal_center]")
+    Entity::kill("@e[type=minecraft:marker,tag=portal_center]");
     Entity::summon("minecraft:marker", 0, 100, 0);
     Entity::summon("minecraft:armor_stand", 0, 100, 0);
     Entity::tag("@e[type=minecraft:marker]", "portal_center");
@@ -23,6 +23,13 @@ void placeDungeonForPlayer() {
     World::placeJigsaw("dungeontest:dungeon", "dungeontest:start", 20, 0, 100, 0);
     Entity::removeTag("@s", "entering_void");
     Entity::clearEffect("@s");
+    Chat::tellRaw("@a", {"text": "Hello!", "color": "gold"});
+}
+
+@event("minecraft:player_killed_entity", {"entity": {"type": "minecraft:zombie"}})
+@revoke
+void onZombieKill() {
+    Chat::say("You killed a zombie!");
 }
 
 void schedulePlacement() {
@@ -40,10 +47,32 @@ void teleportNearbyToVoid() {
     }
 }
 
+@predicate("dungeontest:is_sneaking", {"condition": "minecraft:entity_properties", "entity": "this", "predicate": {"flags": {"is_sneaking": true}}})
+void dummy() { }
+
+class Point {
+public:
+    int x = 0;
+    int y = 0;
+    
+    void print() {
+        Chat::sayInt(x);
+        Chat::sayInt(y);
+    }
+    
+    int distanceSquared() {
+        return x * x + y * y;
+    }
+};
+
 @tick
 void onTick() {
     int near = Entity::existsAt("@e[tag=portal_center,limit=1]", "@a[distance=..2]");
     if (near == 1) {
         Server::executeAsAt("@a", "@e[tag=portal_center,limit=1]", teleportNearbyToVoid());
+    }
+    int sneaking = Server::checkPredicateAs("@p", "dungeontest:is_sneaking");
+    if (sneaking == 1) {
+        Chat::say("You are sneaking!");
     }
 }

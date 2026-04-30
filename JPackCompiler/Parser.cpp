@@ -4,6 +4,8 @@
 #include <iostream>
 #include <utility>
 
+#include "Codegen.h"
+
 std::unique_ptr<ProgramNode> Parser::parse() {
     auto program = std::make_unique<ProgramNode>();
     while (!isAtEnd()) {
@@ -320,7 +322,22 @@ std::unique_ptr<ASTNode> Parser::parseStatement() {
             break;
         }
         default: {
+            if (current().type == TokenType::IDENTIFIER && peek().type == TokenType::IDENTIFIER) {
+                return parseVariableDecl(); // IDENTIFIER IDENTIFIER (e.g. "Point p")
+            }
             auto expression = parseExpression();
+            // check for member access assignment
+            if (auto* access = dynamic_cast<MemberAccessNode*>(expression.get())) {
+                if (current().type == TokenType::EQUAL) {
+                    advance();
+                    auto assign = std::make_unique<MemberAssignNode>();
+                    assign->object = std::move(access->object);
+                    assign->memberName = access->memberName;
+                    assign->value = parseExpression();
+                    expect(TokenType::SEMICOLON);
+                    return assign;
+                }
+            }
             if (auto* access = dynamic_cast<ArrayAccessNode*>(expression.get())) {
                 if (current().type == TokenType::EQUAL) {
                     advance();
@@ -390,6 +407,26 @@ std::unique_ptr<ASTNode> Parser::parseForStatement() {
 
 std::unique_ptr<ASTNode> Parser::parseExpression(int minBP) {
     auto left = parsePrimary(); // parse the leftmost value
+    
+    if (current().type == TokenType::MATCHES) {
+        advance(); // consume matches
+        auto matchesNode = std::make_unique<MatchesExprNode>();
+        matchesNode->target = std::move(left);
+        // parse range: could be 1..10, ..10, 1.., or just 1
+        if (current().type == TokenType::INT_LITERAL) {
+            matchesNode->min = std::stoi(advance().value);
+            matchesNode->hasMin = true;
+        }
+        if (current().type == TokenType::RANGE) {
+            advance();
+            matchesNode->hasRange = true;
+            if (current().type == TokenType::INT_LITERAL) {
+                matchesNode->max = std::stoi(advance().value);
+                matchesNode->hasMax = true;
+            }
+        }
+        return matchesNode;
+    }
     
     // handle assignment
     if (current().type == TokenType::EQUAL) {
@@ -461,7 +498,12 @@ std::unique_ptr<VariableNode> Parser::parseVariableDecl() {
     auto variable = std::make_unique<VariableNode>();
     variable->sourceLine = current().line;
     variable->sourceColumn = current().column;
-    TypeInfo typeInfo{.name = tokenTypeToString(advance().type), .isReference = false};
+    TypeInfo typeInfo;
+    if (current().type == TokenType::IDENTIFIER) {
+        typeInfo.name = advance().value; // capture class/struct names
+    } else {
+        typeInfo.name = tokenTypeToString(advance().type);
+    }
     if (current().type == TokenType::AMPERSAND) {
         typeInfo.isReference = true;
         advance();
@@ -530,6 +572,10 @@ std::unique_ptr<AnnotationNode> Parser::parseAnnotation() {
                 advance();
                 continue;
             }
+            if (current().type == TokenType::LBRACE) {
+                annotation->arguments.emplace_back(Codegen::serializeJson(parseJson().get()));
+                continue;
+            }
             annotation->arguments.emplace_back(advance().value);
         }
         expect(TokenType::RPAREN);
@@ -548,6 +594,7 @@ std::vector<std::unique_ptr<ASTNode>> Parser::parseBlock() {
 }
 
 std::unique_ptr<ASTNode> Parser::parsePrimary() {
+    std::unique_ptr<ASTNode> result;
     switch (current().type) {
         case TokenType::INT_LITERAL:
         case TokenType::FLOAT_LITERAL:
@@ -560,7 +607,8 @@ std::unique_ptr<ASTNode> Parser::parsePrimary() {
             literal->type = current().type;
             literal->value = current().value;
             advance();
-            return literal;
+            result = std::move(literal);
+            break;
         }
         case TokenType::IDENTIFIER: {
             // identifier
@@ -583,7 +631,8 @@ std::unique_ptr<ASTNode> Parser::parsePrimary() {
                     match(TokenType::COMMA);
                 }
                 advance(); // consume ')'
-                return call;
+                result = std::move(call);
+                break;
             }
             
             // check for postfix ++ or --
@@ -594,7 +643,8 @@ std::unique_ptr<ASTNode> Parser::parsePrimary() {
                 unary->op = current().type;
                 unary->operand = std::move(identifier);
                 advance();
-                return unary;
+                result = std::move(unary);
+                break;
             }
             
             // function
@@ -609,7 +659,8 @@ std::unique_ptr<ASTNode> Parser::parsePrimary() {
                     match(TokenType::COMMA);
                 }
                 advance(); // consume ')'
-                return functionCall;
+                result = std::move(functionCall);
+                break;
             }
             
             // array access
@@ -619,16 +670,24 @@ std::unique_ptr<ASTNode> Parser::parsePrimary() {
                 advance(); // consume [
                 arrayAccess->index = parseExpression();
                 expect(TokenType::RBRACK);
-                return arrayAccess;
+                result = std::move(arrayAccess);
+                break;
             }
             
-            return identifier;
+            result = std::move(identifier);
+            break;
         }
         case TokenType::LPAREN: {
             advance();
             auto expression = parseExpression();
             expect(TokenType::RPAREN);
-            return expression;
+            result = std::move(expression);
+            break;
+        }
+        case TokenType::LBRACE:
+        case TokenType::LBRACK: {
+            result = parseJson();
+            break;
         }
         case TokenType::NOT:
         case TokenType::MINUS: {
@@ -638,10 +697,137 @@ std::unique_ptr<ASTNode> Parser::parsePrimary() {
             unary->op = current().type;
             advance();
             unary->operand = parsePrimary();
-            return unary;
+            result = std::move(unary);
+            break;
         }
-        default: return nullptr;
+        default: result = nullptr;
     }
+    
+    // method chaining or member access
+    while (current().type == TokenType::DOT) {
+        advance(); // consume .
+        std::string memberName = expect(TokenType::IDENTIFIER).value;
+        if (current().type == TokenType::LPAREN) {
+            // method call
+            auto method = std::make_unique<MethodCallNode>();
+            method->sourceLine = current().line;
+            method->sourceColumn = current().column;
+            method->object = std::move(result);
+            method->methodName = memberName;
+            advance(); // consume (
+            while (current().type != TokenType::RPAREN) {
+                method->arguments.emplace_back(parseExpression());
+                match(TokenType::COMMA);
+            }
+            advance(); // consume )
+            result = std::move(method);
+        } else {
+            // member variable access
+            auto access = std::make_unique<MemberAccessNode>();
+            access->sourceLine = current().line;
+            access->sourceColumn = current().column;
+            access->object = std::move(result);
+            access->memberName = memberName;
+            result = std::move(access);
+        }
+    }
+    
+    while (current().type == TokenType::DOT) {
+        advance(); // consume .
+        std::string memberName = expect(TokenType::IDENTIFIER).value;
+        if (current().type == TokenType::LPAREN) {
+            // method call
+            auto method = std::make_unique<MethodCallNode>();
+            method->object = std::move(result);
+            method->methodName = memberName;
+            expect(TokenType::LPAREN);
+            while (current().type != TokenType::RPAREN) {
+                method->arguments.emplace_back(parseExpression());
+                match(TokenType::COMMA);
+            }
+            advance();
+            result = std::move(method);
+        } else {
+            // member access
+            auto access = std::make_unique<MemberAccessNode>();
+            access->object = std::move(result);
+            access->memberName = memberName;
+            result = std::move(access);
+        }
+    }
+    
+    return result;
+}
+
+static bool toBool(std::string const& s) {
+    return s != "false";
+}
+
+std::unique_ptr<JsonNode> Parser::parseJson() {
+    bool arrayMode = false;
+    if (match(TokenType::LBRACK)) {
+        arrayMode = true;
+    } else {
+        expect(TokenType::LBRACE);
+    }
+    auto rootNode = std::make_unique<JsonNode>();
+    rootNode->valueType = arrayMode ? JsonValueType::Array : JsonValueType::Object;
+    while (current().type != TokenType::RBRACE) {
+        auto node = std::make_unique<JsonNode>();
+        if (!arrayMode) {
+            node->identifier = expect(TokenType::STRING_LITERAL).value;
+            expect(TokenType::COLON);
+        }
+        switch (current().type) {
+            case TokenType::STRING_LITERAL: {
+                node->valueType = JsonValueType::String;
+                node->stringValue = advance().value;
+                break;
+            }
+            case TokenType::INT_LITERAL:
+            case TokenType::FLOAT_LITERAL:
+            case TokenType::DOUBLE_LITERAL: {
+                node->valueType = JsonValueType::Number;
+                node->numberValue = std::stod(advance().value);
+                break;
+            }
+            case TokenType::BOOL_LITERAL: {
+                node->valueType = JsonValueType::Bool;
+                node->boolValue = toBool(advance().value);
+                break;
+            }
+            case TokenType::LBRACE: {
+                node->valueType = JsonValueType::Object;
+                auto objectNode = parseJson();
+                node->objectEntries = std::move(objectNode->objectEntries);
+                break;
+            }
+            case TokenType::LBRACK: {
+                node->valueType = JsonValueType::Array;
+                auto arrayNode = parseJson();
+                node->arrayElements = std::move(arrayNode->arrayElements);
+                break;
+            }
+            case TokenType::IDENTIFIER: {
+                if (current().value == "null") {
+                    node->valueType = JsonValueType::Null;
+                    advance();
+                    break;
+                }
+            }
+            default: {
+                std::cout << "Unknown json entry\n";
+            }
+        }
+        if (arrayMode) {
+            rootNode->arrayElements.emplace_back(std::move(node));
+        } else {
+            rootNode->objectEntries.emplace_back(node->identifier, std::move(node));
+        }
+        match(TokenType::COMMA);
+    }
+    advance(); // consume } or ]
+    return rootNode;
 }
 
 int Parser::getBindingPower(TokenType type) {

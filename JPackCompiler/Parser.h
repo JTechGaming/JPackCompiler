@@ -42,8 +42,9 @@ private:
     std::unique_ptr<AnnotationNode> parseAnnotation();
     
     std::vector<std::unique_ptr<ASTNode>> parseBlock();
-    
+
     std::unique_ptr<ASTNode> parsePrimary();
+    std::unique_ptr<JsonNode> parseJson();
     int getBindingPower(TokenType type);
     
     Token expect(TokenType type);

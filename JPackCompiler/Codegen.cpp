@@ -13,6 +13,7 @@ static const std::string FUNCTIONS_DIR = "function";
 void Codegen::generate(std::string outputPath) {
     m_outputPath = std::move(outputPath);
     formatPrefix();
+    registerClasses();
     registerFunctions();
     
     // clean output directory before generating
@@ -24,6 +25,7 @@ void Codegen::generate(std::string outputPath) {
     std::filesystem::create_directories(functionsPath);
     
     generatePackMeta();
+    generateClassMethods();
 
     for (auto& declaration : m_programNode->declarations) {
         if (auto* ns = dynamic_cast<NamespaceNode*>(declaration.get())) {
@@ -78,6 +80,9 @@ void Codegen::generateFunction(FunctionNode* function) {
             }
         }
         
+        if (annotation->name == "predicate" && annotation->arguments.size() >= 2) {
+            generatePredicate(annotation->arguments[0], annotation->arguments[1]);
+        }
         if (annotation->name == "dimension" && !annotation->arguments.empty()) {
             dimensionName = annotation->arguments[0];
         }
@@ -202,6 +207,25 @@ std::string Codegen::generateStatement(ASTNode* node) {
             return out;
         }
         std::string variableTypeName = variable->type.name;
+        if (m_classDefinitions.contains(variableTypeName)) {
+            // instantiate class
+            m_instanceTypes[variable->name] = variableTypeName;
+            auto& def = m_classDefinitions[variableTypeName];
+            std::string out = sourceComment(variable);
+            // create scoreboard entries for each member variable
+            for (auto* memberVar : def.memberVariables) {
+                std::string entry = m_prefix + "__" + variable->name + "_" + memberVar->name + "_" + std::format("{:04x}", m_counter++);
+                m_instanceMembers[variable->name + "." + memberVar->name] = entry;
+                m_localVarEntries.emplace_back(entry);
+                out += "scoreboard objectives add " + entry + " dummy\n";
+                if (memberVar->value != nullptr) {
+                    if (auto* lit = dynamic_cast<LiteralNode*>(memberVar->value.get())) {
+                        out += "scoreboard players set " + m_prefix + " " + entry + " " + lit->value + "\n";
+                    }
+                }
+            }
+            return out;
+        }
         std::ranges::transform(variableTypeName, variableTypeName.begin(),
             [](unsigned char c) { return std::tolower(c); });
         if (variableTypeName == "string") {
@@ -228,6 +252,25 @@ std::string Codegen::generateStatement(ASTNode* node) {
             out += "scoreboard players operation " + m_prefix + " " + uuid + " = " + m_prefix + " " + initResult.resultEntry + "\n";
         }
         return out;
+    }
+    if (auto* method = dynamic_cast<MethodCallNode*>(node)) {
+        ExprResult result = generateExpression(method);
+        std::string out = sourceComment(method);
+        out += result.commands;
+        return out;
+    }
+    if (auto* assign = dynamic_cast<MemberAssignNode*>(node)) {
+        if (auto* ident = dynamic_cast<IdentifierNode*>(assign->object.get())) {
+            std::string key = ident->name + "." + assign->memberName;
+            if (m_instanceMembers.contains(key)) {
+                ExprResult val = generateExpression(assign->value.get());
+                std::string out = val.commands;
+                out += "scoreboard players operation " + m_prefix + " " + m_instanceMembers[key] + " = " + m_prefix + " " + val.resultEntry + "\n";
+                return out;
+            }
+        }
+        std::cerr << "Codegen WARNING: unknown member assignment\n";
+        return "";
     }
     if (auto* assign = dynamic_cast<ArrayAssignNode*>(node)) {
         ExprResult index = generateExpression(assign->index.get());
@@ -366,6 +409,52 @@ ExprResult Codegen::generateExpression(ASTNode* node) {
         }
         return {.commands = "", .resultEntry = entry, .isStorage = false};
     }
+    if (auto* access = dynamic_cast<MemberAccessNode*>(node)) {
+        if (auto* ident = dynamic_cast<IdentifierNode*>(access->object.get())) {
+            std::string key = ident->name + "." + access->memberName;
+            if (m_instanceMembers.contains(key)) {
+                return {.commands = "", .resultEntry = m_instanceMembers[key], .isStorage = false};
+            }
+        }
+        std::cerr << "Codegen WARNING: unknown member access\n";
+        return {.commands = "", .resultEntry = ""};
+    }
+    if (auto* method = dynamic_cast<MethodCallNode*>(node)) {
+        if (auto* ident = dynamic_cast<IdentifierNode*>(method->object.get())) {
+            // find which class this instance belongs to
+            std::string instanceName = ident->name;
+            std::string classType = m_instanceTypes[instanceName];
+            std::string classNameLower = classType;
+            std::ranges::transform(classNameLower, classNameLower.begin(),
+                [](unsigned char c) { return std::tolower(c); });
+            std::string methodNameLower = method->methodName;
+            std::ranges::transform(methodNameLower, methodNameLower.begin(),
+                [](unsigned char c) { return std::tolower(c); });
+            std::string methodRef = classNameLower + "/" + methodNameLower;
+        
+            std::string out;
+            std::string temp = m_prefix + "__tmp_" + std::format("{:04x}", m_counter++);
+            m_tempEntries.emplace_back(temp);
+            out += "scoreboard objectives add " + temp + " dummy\n";
+        
+            // pass member variables as implicit arguments
+            auto& classDef = m_classDefinitions[classType];
+            for (size_t i = 0; i < classDef.memberVariables.size(); i++) {
+                std::string key = instanceName + "." + classDef.memberVariables[i]->name;
+                std::string entry = m_instanceMembers[key];
+                out += "scoreboard players operation " + m_prefix + " " + 
+                       m_functionParams[methodRef][i] + 
+                       " = " + m_prefix + " " + entry + "\n";
+            }
+        
+            // pass explicit arguments
+            out += generateCallArgs(methodRef, method->arguments);
+            out += "execute store result score " + m_prefix + " " + temp + 
+                   " run function " + m_name + ":" + methodRef + "\n";
+            return {.commands = out, .resultEntry = temp};
+        }
+        return {.commands = "", .resultEntry = ""};
+    }
     if (auto* access = dynamic_cast<ArrayAccessNode*>(node)) {
         ExprResult index = generateExpression(access->index.get());
         std::string temp = m_prefix + "__tmp_" + std::format("{:04x}", m_counter++);
@@ -395,6 +484,9 @@ ExprResult Codegen::generateExpression(ASTNode* node) {
         std::string commands = "scoreboard objectives add " + tempEntry + " dummy\n";
         commands += "scoreboard players set " + m_prefix + " " + tempEntry + " " + value + "\n";
         return {.commands = commands, .resultEntry = tempEntry};
+    }
+    if (auto* json = dynamic_cast<JsonNode*>(node)) {
+        return {.commands = "", .resultEntry = serializeJson(json), .isStorage = true};
     }
     if (auto* call = dynamic_cast<CallNode*>(node)) {
         std::string funcName = call->name;
@@ -567,6 +659,25 @@ std::string Codegen::generateSubFunction(const std::string& name, const std::vec
 }
 
 ConditionResult Codegen::generateCondition(ASTNode* node) {
+    if (auto* matches = dynamic_cast<MatchesExprNode*>(node)) {
+        ExprResult target = generateExpression(matches->target.get());
+        std::string range;
+        if (matches->hasMin && matches->hasRange && matches->hasMax) {
+            range = std::to_string(matches->min) + ".." + std::to_string(matches->max);
+        } else if (matches->hasMin && matches->hasRange) {
+            range = std::to_string(matches->min) + "..";
+        } else if (matches->hasRange && matches->hasMax) {
+            range = ".." + std::to_string(matches->max);
+        } else {
+            range = std::to_string(matches->min);
+        }
+    
+        ConditionResult result;
+        result.commands = target.commands;
+        result.condition = "if score " + m_prefix + " " + target.resultEntry + " matches " + range;
+        result.elseCondition = "unless score " + m_prefix + " " + target.resultEntry + " matches " + range;
+        return result;
+    }
     if (auto* binary = dynamic_cast<BinaryExprNode*>(node)) {
         ExprResult left = generateExpression(binary->left.get());
         ExprResult right = generateExpression(binary->right.get());
@@ -595,6 +706,48 @@ ConditionResult Codegen::generateCondition(ASTNode* node) {
     return {.commands = "", .condition = ""};
 }
 
+std::string Codegen::serializeJson(const JsonNode* json) {
+    switch (json->valueType) {
+        case JsonValueType::Object: {
+            std::string out = "{";
+            for (size_t i = 0; i < json->objectEntries.size(); i++) {
+                auto& entry = json->objectEntries[i];
+                out += "\"" + entry.first + "\": " + serializeJson(entry.second.get());
+                if (i < json->objectEntries.size() - 1) out += ",";
+            }
+            out += "}";
+            return out;
+        }
+        case JsonValueType::Array: {
+            std::string out = "[";
+            for (size_t i = 0; i < json->arrayElements.size(); i++) {
+                auto& entry = json->arrayElements[i];
+                out += serializeJson(entry.get());
+                if (i < json->arrayElements.size() - 1) out += ",";
+            }
+            out += "]";
+            return out;
+        }
+        case JsonValueType::String: {
+            return '"' + json->stringValue + '"';
+        }
+        case JsonValueType::Number: {
+            double intPart;
+            if (std::modf(json->numberValue, &intPart) == 0.0) {
+                return std::to_string(static_cast<int>(intPart));
+            }
+            return std::to_string(json->numberValue);
+        }
+        case JsonValueType::Bool: {
+            return json->boolValue ? "true" : "false";
+        }
+        case JsonValueType::Null: {
+            return "null";
+        }
+    }
+    return "null";
+}
+
 void Codegen::registerFunctions() {
     for (auto& declaration : m_programNode->declarations) {
         if (auto* ns = dynamic_cast<NamespaceNode*>(declaration.get())) {
@@ -608,6 +761,127 @@ void Codegen::registerFunctions() {
         }
         if (auto* fn = dynamic_cast<FunctionNode*>(declaration.get())) {
             registerFunction(fn);
+        }
+    }
+}
+
+void Codegen::registerClasses() {
+    for (auto& declaration : m_programNode->declarations) {
+        if (auto* classNode = dynamic_cast<ClassNode*>(declaration.get())) {
+            ClassDefinition def;
+            // collect all members from both public and private
+            for (auto& member : classNode->publicMembers) {
+                if (auto* var = dynamic_cast<VariableNode*>(member.get())) {
+                    def.memberVariables.emplace_back(var);
+                } else if (auto* fn = dynamic_cast<FunctionNode*>(member.get())) {
+                    def.memberFunctions.emplace_back(fn);
+                }
+            }
+            for (auto& member : classNode->privateMembers) {
+                if (auto* var = dynamic_cast<VariableNode*>(member.get())) {
+                    def.memberVariables.emplace_back(var);
+                } else if (auto* fn = dynamic_cast<FunctionNode*>(member.get())) {
+                    def.memberFunctions.emplace_back(fn);
+                }
+            }
+            
+            // register method functions with implicit member variable parameters
+            std::string classNameLower = classNode->name;
+            std::ranges::transform(classNameLower, classNameLower.begin(),
+                [](unsigned char c) { return std::tolower(c); });
+            
+            for (auto* fn : def.memberFunctions) {
+                std::string funcNameLower = fn->name;
+                std::ranges::transform(funcNameLower, funcNameLower.begin(),
+                    [](unsigned char c) { return std::tolower(c); });
+                std::string methodRef = classNameLower + "/" + funcNameLower;
+                
+                // implicit member variable parameters
+                for (auto* memberVar : def.memberVariables) {
+                    std::string uuid = m_prefix + "__" + memberVar->name + "_" + std::format("{:04x}", m_counter++);
+                    m_functionParams[methodRef].emplace_back(uuid);
+                    m_functionParamNames[methodRef].emplace_back(memberVar->name);
+                    std::string typeLower = memberVar->type.name;
+                    std::ranges::transform(typeLower, typeLower.begin(),
+                        [](unsigned char c) { return std::tolower(c); });
+                    m_functionParamTypes[methodRef].emplace_back(typeLower);
+                    m_functionParamIsRef[methodRef].emplace_back(false);
+                    // map member name to this entry so method body can find it
+                    m_scoreboardNames[memberVar->name] = uuid;
+                }
+                
+                // explicit parameters
+                for (auto& param : fn->parameters) {
+                    std::string uuid = m_prefix + "__" + param->name + "_" + std::format("{:04x}", m_counter++);
+                    m_functionParams[methodRef].emplace_back(uuid);
+                    m_functionParamNames[methodRef].emplace_back(param->name);
+                    std::string typeLower = param->type.name;
+                    std::ranges::transform(typeLower, typeLower.begin(),
+                        [](unsigned char c) { return std::tolower(c); });
+                    m_functionParamTypes[methodRef].emplace_back(typeLower);
+                    m_functionParamIsRef[methodRef].emplace_back(param->type.isReference);
+                    m_scoreboardNames[param->name] = uuid;
+                }
+            }
+            
+            m_classDefinitions[classNode->name] = std::move(def);
+        }
+    }
+}
+
+void Codegen::generateClassMethods() {
+    for (auto& def : m_classDefinitions) {
+        for (auto& function : def.second.memberFunctions) {
+            m_localVarEntries.clear();
+            auto savedScoreboardNames = m_scoreboardNames;
+            auto savedStorageNames = m_storageNames;
+            std::string funcName = function->name;
+            std::ranges::transform(funcName, funcName.begin(),
+                                   [](unsigned char c) { return std::tolower(c); });
+        
+            std::string nsLower = def.first;
+            std::ranges::transform(nsLower, nsLower.begin(),
+                                   [](unsigned char c) { return std::tolower(c); });
+            std::string funcRef = nsLower.empty() ? funcName : nsLower + "/" + funcName;
+        
+            auto functionPath = std::filesystem::path(m_outputPath) / "data" / m_name / FUNCTIONS_DIR / (funcRef + ".mcfunction");
+            std::filesystem::create_directories(functionPath.parent_path());
+        
+            std::ofstream file(functionPath);
+        
+            file << "# Generated from class function '" + def.first + "::" + function->name + "' [line " + 
+                std::to_string(function->sourceLine) + "]\n\n";
+            
+            for (const auto& objective : m_functionParams[funcRef]) {
+                file << "scoreboard objectives add " + objective + " dummy\n";
+            }
+            
+            // restore member variable to parameter mappings for this method
+            auto& classDef = m_classDefinitions[def.first];
+            for (size_t i = 0; i < classDef.memberVariables.size(); i++) {
+                m_scoreboardNames[classDef.memberVariables[i]->name] = m_functionParams[funcRef][i];
+            }
+            // then explicit parameters
+            for (size_t i = 0; i < function->parameters.size(); i++) {
+                m_scoreboardNames[function->parameters[i]->name] = m_functionParams[funcRef][classDef.memberVariables.size() + i];
+            }
+        
+            for (auto& statement : function->body) {
+                m_tempEntries.clear();
+                file << generateStatement(statement.get()) << '\n';
+                for (auto& entry : m_tempEntries) {
+                    file << "scoreboard objectives remove " + entry + "\n";
+                }
+            }
+        
+            for (auto& entry : m_localVarEntries) {
+                file << "scoreboard objectives remove " + entry + "\n";
+            }
+            m_localVarEntries.clear();
+        
+            file.close();
+            m_scoreboardNames = savedScoreboardNames;
+            m_storageNames = savedStorageNames;
         }
     }
 }
@@ -757,6 +1031,23 @@ void Codegen::generateStructureSet(const std::vector<std::string>& arguments) co
     json["placement"]["separation"] = separation;
     json["placement"]["salt"] = 12345;
     
+    std::ofstream file(path);
+    file << std::setw(4) << json << '\n';
+}
+
+void Codegen::generatePredicate(const std::string& predicateName, const std::string& predicateJson) const {
+    std::string namespacePart = predicateName;
+    std::string pathPart = predicateName;
+    size_t colon = predicateName.find(':');
+    if (colon != std::string::npos) {
+        namespacePart = predicateName.substr(0, colon);
+        pathPart = predicateName.substr(colon + 1);
+    }
+    
+    auto path = std::filesystem::path(m_outputPath) / "data" / namespacePart / "predicate" / (pathPart + ".json");
+    std::filesystem::create_directories(path.parent_path());
+    
+    nlohmann::json json = nlohmann::json::parse(predicateJson);
     std::ofstream file(path);
     file << std::setw(4) << json << '\n';
 }

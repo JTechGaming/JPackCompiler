@@ -26,6 +26,7 @@ static const std::unordered_map<std::string, TokenType> keywords = {
     {"continue",  TokenType::CONTINUE},
     {"public",  TokenType::PUBLIC},
     {"private",  TokenType::PRIVATE},
+    {"matches", TokenType::MATCHES},
 };
 
 std::vector<Token> Lexer::tokenize() {
@@ -78,6 +79,7 @@ void Lexer::nextToken() {
     if (c == '>' && nc == '=') { addToken(TokenType::GREATER_EQUAL); advance(); return; }
     if (c == '&' && nc == '&') { addToken(TokenType::AND);           advance(); return; }
     if (c == '|' && nc == '|') { addToken(TokenType::OR);            advance(); return; }
+    if (c == '.' && current() == '.') { addToken(TokenType::RANGE); advance(); return; }
     
     switch (c) {
         case '(': { addToken(TokenType::LPAREN);    break; }
@@ -190,7 +192,7 @@ void Lexer::lexNumber(char c) {
         result += current();
         advance();
     }
-    if (current() == '.') {
+    if (current() == '.' && peek() != '.') {
         type = TokenType::DOUBLE_LITERAL;
         result += '.';
         advance();

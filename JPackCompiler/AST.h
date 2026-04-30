@@ -93,6 +93,34 @@ struct ArrayAssignNode : ASTNode {
     std::unique_ptr<ASTNode> value;
 };
 
+struct MatchesExprNode : ASTNode {
+    std::unique_ptr<ASTNode> target;
+    int min = 0;
+    int max = 0;
+    bool hasMin = false;
+    bool hasMax = false;
+    bool hasRange = false;
+};
+
+enum class JsonValueType {
+    Object,
+    Array,
+    String,
+    Number,
+    Bool,
+    Null
+};
+
+struct JsonNode : ASTNode {
+    JsonValueType valueType;
+    std::string identifier;
+    std::string stringValue;                                    // for String
+    double numberValue;                                         // for Number
+    bool boolValue;                                             // for Bool
+    std::vector<std::pair<std::string, std::unique_ptr<JsonNode>>> objectEntries;  // for Object
+    std::vector<std::unique_ptr<JsonNode>> arrayElements;       // for Array
+};
+
 struct IfNode : ASTNode {
     std::unique_ptr<ASTNode> condition;
     std::vector<std::unique_ptr<ASTNode>> body;
@@ -138,6 +166,12 @@ struct IdentifierNode : ASTNode {
     std::string name;
 };
 
+struct MethodCallNode : ASTNode {
+    std::unique_ptr<ASTNode> object;   // the thing being called on
+    std::string methodName;
+    std::vector<std::unique_ptr<ASTNode>> arguments;
+};
+
 struct CallNode : ASTNode {
     std::string namespaceName;
     std::string name;
@@ -147,6 +181,12 @@ struct CallNode : ASTNode {
 struct MemberAccessNode : ASTNode {
     std::unique_ptr<ASTNode> object;
     std::string memberName;
+};
+
+struct MemberAssignNode : ASTNode {
+    std::unique_ptr<ASTNode> object;
+    std::string memberName;
+    std::unique_ptr<ASTNode> value;
 };
 
 struct NamespaceNode : ASTNode {

@@ -26,6 +26,7 @@ enum class TokenType {
 
     // Logical
     AND, OR, NOT,
+    MATCHES, RANGE,
 
     // Special
     AT, IDENTIFIER,

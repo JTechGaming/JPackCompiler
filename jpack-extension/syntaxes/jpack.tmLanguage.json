@@ -31,7 +31,7 @@
             "patterns": [
                 {
                     "name": "entity.name.function.decorator.jpack",
-                    "match": "@(tick|load|intrinsic|returns_command|ref_intrinsic|event|revoke|inline)\\b"
+                    "match": "@(tick|load|intrinsic|returns_command|ref_intrinsic|store_result_intrinsic|predicate|event|revoke|inline)\\b"
                 },
                 {
                     "name": "entity.name.function.decorator.jpack",
