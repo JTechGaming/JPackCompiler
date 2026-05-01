@@ -145,9 +145,18 @@ std::unique_ptr<ASTNode> Parser::parseDeclaration() {
     while (current().type == TokenType::AT) {
         annotations.emplace_back(parseAnnotation());
     }
+
+    if (current().type == TokenType::IDENTIFIER && peek().type == TokenType::IDENTIFIER && peek(2).type == TokenType::LPAREN) {
+        return parseFunctionDecl(std::move(annotations));
+    }
+    
     switch (current().type) {
         case TokenType::NAMESPACE: return parseNamespaceDecl();
-        case TokenType::CLASS:  return parseClassDecl();
+        case TokenType::CLASS:  {
+            auto classNode = parseClassDecl();
+            classNode->annotations = std::move(annotations);
+            return classNode;
+        }
         case TokenType::STRUCT: return parseStructDecl();
         case TokenType::ENUM:   return parseEnumDecl();
         case TokenType::VOID:
@@ -193,10 +202,16 @@ std::unique_ptr<FunctionNode> Parser::parseFunctionDecl(std::vector<std::unique_
         if (annotation->name == "revoke") function.isRevoke = true;
     }
     function.annotations = std::move(annotations);
-    function.returnType = TypeInfo{.name = tokenTypeToString(current().type), .isReference = false};
-    advance();
+    TypeInfo returnType;
+    if (current().type == TokenType::IDENTIFIER) {
+        returnType.name = advance().value;
+    } else {
+        returnType.name = tokenTypeToString(advance().type);
+    }
+    function.returnType = returnType;
     function.name = current().value;
-    advance(2);
+    advance();  // consume the name
+    expect(TokenType::LPAREN);
     while (current().type != TokenType::RPAREN) {
         auto parameter = std::make_unique<ParameterNode>();
         parameter->sourceLine = current().line;
@@ -554,18 +569,23 @@ std::unique_ptr<AnnotationNode> Parser::parseAnnotation() {
     if (current().type == TokenType::LPAREN) {
         advance();
         while (current().type != TokenType::RPAREN) {
-            if (current().type == TokenType::LBRACK) { // templatepool
-                advance(); // consume [
-                while (current().type != TokenType::RBRACK) {
-                    if (current().type == TokenType::COMMA) { advance(); continue; }
-                    expect(TokenType::LPAREN);
-                    std::string location = expect(TokenType::STRING_LITERAL).value;
-                    expect(TokenType::COMMA);
-                    int weight = std::stoi(expect(TokenType::INT_LITERAL).value);
-                    expect(TokenType::RPAREN);
-                    annotation->poolEntries.emplace_back(TemplatePoolEntry{location, weight});
+            if (current().type == TokenType::LBRACK) {
+                if (peek().type == TokenType::LPAREN) { // templatepool
+                    advance(); // consume [
+                    while (current().type != TokenType::RBRACK) {
+                        if (current().type == TokenType::COMMA) { advance(); continue; }
+                        expect(TokenType::LPAREN);
+                        std::string location = expect(TokenType::STRING_LITERAL).value;
+                        expect(TokenType::COMMA);
+                        int weight = std::stoi(expect(TokenType::INT_LITERAL).value);
+                        expect(TokenType::RPAREN);
+                        annotation->poolEntries.emplace_back(TemplatePoolEntry{location, weight});
+                    }
+                    advance(); // consume ]
+                    continue;
                 }
-                advance(); // consume ]
+                // JSON array
+                annotation->arguments.emplace_back(Codegen::serializeJson(parseJson().get()));
                 continue;
             }
             if (current().type == TokenType::COMMA) {
@@ -677,6 +697,14 @@ std::unique_ptr<ASTNode> Parser::parsePrimary() {
             result = std::move(identifier);
             break;
         }
+        case TokenType::THIS: {
+            auto thisNode = std::make_unique<ThisNode>();
+            thisNode->sourceLine = current().line;
+            thisNode->sourceColumn = current().column;
+            advance();
+            result = std::move(thisNode);
+            break;
+        }
         case TokenType::LPAREN: {
             advance();
             auto expression = parseExpression();
@@ -772,7 +800,7 @@ std::unique_ptr<JsonNode> Parser::parseJson() {
     }
     auto rootNode = std::make_unique<JsonNode>();
     rootNode->valueType = arrayMode ? JsonValueType::Array : JsonValueType::Object;
-    while (current().type != TokenType::RBRACE) {
+    while (current().type != (arrayMode ? TokenType::RBRACK : TokenType::RBRACE)) {
         auto node = std::make_unique<JsonNode>();
         if (!arrayMode) {
             node->identifier = expect(TokenType::STRING_LITERAL).value;
@@ -816,7 +844,7 @@ std::unique_ptr<JsonNode> Parser::parseJson() {
                 }
             }
             default: {
-                std::cout << "Unknown json entry\n";
+                std::cout << "Unknown json entry: " << tokenTypeToString(current().type) << " value: " << current().value << "\n";
             }
         }
         if (arrayMode) {

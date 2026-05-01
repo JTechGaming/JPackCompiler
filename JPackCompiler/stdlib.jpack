@@ -1,3 +1,94 @@
+@compile_time_class
+class Selector {
+public:
+    string base = "";
+    string conditions = "";
+    
+    Selector allPlayers() {
+        base = "@a";
+        return this;
+    }
+    
+    Selector nearestPlayer() {
+        base = "@p";
+        return this;
+    }
+    
+    Selector allEntities() {
+        base = "@e";
+        return this;
+    }
+    
+    Selector nearestEntity() {
+        base = "@n";
+        return this;
+    }
+    
+    Selector self() {
+        base = "@s";
+        return this;
+    }
+    
+    Selector randomPlayer() {
+        base = "@r";
+        return this;
+    }
+    
+    Selector limit(int count) {
+        conditions = conditions + "limit=" + count + ",";
+        return this;
+    }
+    
+    Selector distance(int max) {
+        conditions = conditions + "distance=.." + max + ",";
+        return this;
+    }
+    
+    Selector distanceRange(int min, int max) {
+        conditions = conditions + "distance=" + min + ".." + max + ",";
+        return this;
+    }
+    
+    Selector tag(string t) {
+        conditions = conditions + "tag=" + t + ",";
+        return this;
+    }
+    
+    Selector notTag(string t) {
+        conditions = conditions + "tag=!" + t + ",";
+        return this;
+    }
+    
+    Selector type(string t) {
+        conditions = conditions + "type=" + t + ",";
+        return this;
+    }
+    
+    Selector notType(string t) {
+        conditions = conditions + "type=!" + t + ",";
+        return this;
+    }
+    
+    Selector gamemode(string mode) {
+        conditions = conditions + "gamemode=" + mode + ",";
+        return this;
+    }
+    
+    Selector name(string n) {
+        conditions = conditions + "name=" + n + ",";
+        return this;
+    }
+    
+    Selector team(string t) {
+        conditions = conditions + "team=" + t + ",";
+        return this;
+    }
+    
+    string build() {
+        return base + "[" + conditions + "]";
+    }
+}
+
 namespace World {
     // setBlock, fill, fillbiome, clone, border, data (block, block entity), forceload, gamerule, item (block entities)
     // locate, loot, place, seed, time, weather, particle
@@ -415,6 +506,26 @@ namespace Server {
     }
     
     @intrinsic
+    void setDisplaySlot(string slot, string objective) {
+        @cmd "scoreboard objectives setdisplay {slot} {objective}";
+    }
+    
+    @intrinsic
+    void clearDisplaySlot(string slot) {
+        @cmd "scoreboard objectives setdisplay {slot}";
+    }
+    
+    @intrinsic
+    void setObjectiveDisplay(string objective, string displayName) {
+        @cmd "scoreboard objectives modify {objective} displayname {displayName}";
+    }
+    
+    @intrinsic
+    void setObjectiveRenderType(string objective, string renderType) {
+        @cmd "scoreboard objectives modify {objective} rendertype {renderType}";
+    }
+    
+    @intrinsic
     void executeInDimension(string dimension, string function) {
         @cmd "execute in {dimension} run function {function}";
     }
@@ -439,6 +550,65 @@ namespace Server {
     @store_result_intrinsic
     int checkPredicateAs(string target, string predicate) {
         @cmd "execute as {target} store result storage {__ns}:return value int 1 if predicate {predicate}";
+    }
+}
+
+namespace BossBar {
+    @intrinsic
+    void add(string id, string name) {
+        @cmd "bossbar add {__ns}:{id} {name}";
+    }
+    
+    @intrinsic
+    void remove(string id) {
+        @cmd "bossbar remove {__ns}:{id}";
+    }
+    
+    @intrinsic
+    void setPlayers(string id, string players) {
+        @cmd "bossbar set {__ns}:{id} players {players}";
+    }
+    
+    @intrinsic
+    void setValue(string id, int value) {
+        @cmd "bossbar set {__ns}:{id} value {value}";
+    }
+    
+    @intrinsic
+    void setMax(string id, int max) {
+        @cmd "bossbar set {__ns}:{id} max {max}";
+    }
+    
+    @intrinsic
+    void setColor(string id, string color) {
+        @cmd "bossbar set {__ns}:{id} color {color}";
+    }
+    
+    @intrinsic
+    void setStyle(string id, string style) {
+        @cmd "bossbar set {__ns}:{id} style {style}";
+    }
+    
+    @intrinsic
+    void setVisible(string id, string visible) {
+        @cmd "bossbar set {__ns}:{id} visible {visible}";
+    }
+    
+    @intrinsic
+    void setName(string id, string name) {
+        @cmd "bossbar set {__ns}:{id} name {name}";
+    }
+    
+    @intrinsic
+    @ref_intrinsic
+    void getValue(string id, int& value) {
+        @cmd "execute store result score {value_player} {value_obj} run bossbar get {__ns}:{id} value";
+    }
+    
+    @intrinsic
+    @ref_intrinsic
+    void getMax(string id, int& max) {
+        @cmd "execute store result score {max_player} {max_obj} run bossbar get {__ns}:{id} max";
     }
 }
 

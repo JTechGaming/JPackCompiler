@@ -11,12 +11,25 @@ void onVoidWorldLoad() {
     Chat::say("Dungeon generated!");
 }
 
+@tag("entity_type", "hostile_mobs", ["minecraft:zombie", "minecraft:skeleton", "minecraft:creeper"])
+void dummy() { }
+
 @load
 void onLoad() {
     Entity::kill("@e[type=minecraft:marker,tag=portal_center]");
     Entity::summon("minecraft:marker", 0, 100, 0);
     Entity::summon("minecraft:armor_stand", 0, 100, 0);
     Entity::tag("@e[type=minecraft:marker]", "portal_center");
+    
+    Server::addObjective("kills", "playerKillCount");
+    Server::setObjectiveDisplay("kills", "Player Kills");
+    Server::setDisplaySlot("sidebar", "kills");
+    
+    BossBar::add("health", {"text": "Dungeon Health"});
+    BossBar::setMax("health", 100);
+    BossBar::setValue("health", 100);
+    BossBar::setColor("health", "red");
+    BossBar::setPlayers("health", "@a");
 }
 
 void placeDungeonForPlayer() {
@@ -67,12 +80,44 @@ public:
 
 @tick
 void onTick() {
-    int near = Entity::existsAt("@e[tag=portal_center,limit=1]", "@a[distance=..2]");
-    if (near == 1) {
-        Server::executeAsAt("@a", "@e[tag=portal_center,limit=1]", teleportNearbyToVoid());
+    Selector es;
+    es.allEntities().tag("portal_center").limit(1);
+    string entitySelector = es.build();
+    
+    Selector ps;
+    ps.allPlayers().distance(2);
+    string playerSelector = ps.build();
+    
+    int count = Entity::existsAt(entitySelector, playerSelector);
+    if (count == 1) {
+        Selector allSelector;
+        Server::executeAsAt(allSelector.allPlayers().build(), entitySelector, teleportNearbyToVoid());
     }
     int sneaking = Server::checkPredicateAs("@p", "dungeontest:is_sneaking");
     if (sneaking == 1) {
         Chat::say("You are sneaking!");
     }
 }
+
+@lootTable("chests/dungeon_chest", {
+    "type": "minecraft:chest",
+    "pools": [
+        {
+            "rolls": 3,
+            "entries": [
+                {
+                    "type": "minecraft:item",
+                    "name": "minecraft:diamond",
+                    "weight": 1,
+                    "functions": [
+                        {
+                            "function": "minecraft:set_count",
+                            "count": {"min": 1, "max": 3}
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+})
+void dummy() { }

@@ -12,6 +12,8 @@ enum class TokenType {
     NAMESPACE, CLASS, STRUCT, ENUM,
     IF, ELSE, WHILE, FOR, RETURN, BREAK, CONTINUE,
     PUBLIC, PRIVATE,
+    
+    THIS,
 
     // Symbols
     LPAREN, RPAREN, LBRACE, RBRACE, LBRACK, RBRACK, SEMICOLON, COLON, DOUBLE_COLON, COMMA, DOT,
@@ -98,5 +100,7 @@ inline std::string tokenTypeToString(TokenType type) {
 struct Token {
     TokenType type;
     std::string value;
-    int line, column;
+    int line = 0;
+    int column = 0;
+    int fileIndex = 0;
 };

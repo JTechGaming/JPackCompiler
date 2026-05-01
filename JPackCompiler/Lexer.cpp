@@ -12,6 +12,7 @@ static const std::unordered_map<std::string, TokenType> keywords = {
     {"true",  TokenType::BOOL_LITERAL},
     {"false", TokenType::BOOL_LITERAL},
     {"string", TokenType::STRING},
+    {"this", TokenType::THIS},
     {"void", TokenType::VOID},
     {"namespace", TokenType::NAMESPACE},
     {"class",  TokenType::CLASS},
@@ -128,6 +129,35 @@ void Lexer::skipWhitespace() {
         while (current() == ' ' || current() == '\t' || current() == '\r' || current() == '\n') {
             advance();
             found = true;
+        }
+        if (current() == '#') {
+            // peek ahead to see if it's #line
+            size_t savedPos = m_pos;
+            advance(); // consume #
+            std::string directive;
+            while (isalpha(current())) {
+                directive += current();
+                advance();
+            }
+            if (directive == "line") {
+                // skip whitespace
+                while (current() == ' ') advance();
+                // read line number
+                std::string lineNum;
+                while (isdigit(current())) {
+                    lineNum += current();
+                    advance();
+                }
+                if (!lineNum.empty()) {
+                    m_line = std::stoi(lineNum);
+                    m_column = 1;
+                }
+                found = true;
+            } else {
+                // not a #line directive, restore position
+                m_pos = savedPos;
+            }
+            continue;
         }
         if (current() == '/' && peek() == '/') {
             while (current() != '\n' && !isAtEnd()) advance();

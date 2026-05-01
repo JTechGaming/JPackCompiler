@@ -51,6 +51,7 @@ struct ClassNode : ASTNode {
     std::string name;
     std::vector<std::unique_ptr<ASTNode>> privateMembers;
     std::vector<std::unique_ptr<ASTNode>> publicMembers;
+    std::vector<std::unique_ptr<AnnotationNode>> annotations;
 };
 
 struct StructNode : ASTNode {
@@ -201,3 +202,5 @@ struct ProgramNode : ASTNode {
 struct RawCommandNode : ASTNode {
     std::string command; // the raw command string with {param} placeholders
 };
+
+struct ThisNode : ASTNode {};

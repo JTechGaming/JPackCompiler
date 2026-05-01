@@ -1,32 +1,36 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <set>
 #include <string>
 
 #include "Codegen.h"
 #include "Lexer.h"
 #include "Parser.h"
 
-std::string resolveIncludes(const std::string& source, const std::filesystem::path& basePath) {
+std::string resolveIncludes(const std::string& source, const std::filesystem::path& basePath, std::set<std::filesystem::path>& includedFiles) {
     std::string result;
     std::istringstream stream(source);
     std::string line;
     while (std::getline(stream, line)) {
-        // check for #include directive
-        size_t pos = line.find("#include");
-        if (pos != std::string::npos) {
-            // extract filename between quotes
-            size_t start = line.find('"', pos);
+        if (line.find("#include") != std::string::npos) {
+            size_t start = line.find('"');
             size_t end = line.find('"', start + 1);
             if (start != std::string::npos && end != std::string::npos) {
                 std::string filename = line.substr(start + 1, end - start - 1);
-                auto includePath = basePath / filename;
-                // read and recursively resolve the included file
+                auto includePath = std::filesystem::canonical(basePath / filename);
+                if (includedFiles.contains(includePath)) {
+                    continue; // already included, skip
+                }
+                includedFiles.insert(includePath);
                 std::ifstream includeFile(includePath);
                 if (includeFile.is_open()) {
                     std::string includeSource((std::istreambuf_iterator<char>(includeFile)),
                                               std::istreambuf_iterator<char>());
-                    result += resolveIncludes(includeSource, includePath.parent_path());
+                    int currentLine = std::ranges::count(result, '\n') + 1;
+                    result += "#line 1\n";
+                    result += resolveIncludes(includeSource, includePath.parent_path(), includedFiles);
+                    result += "#line " + std::to_string(currentLine) + "\n";
                 } else {
                     std::cerr << "Error: could not open include file: " << includePath << "\n";
                 }
@@ -95,7 +99,9 @@ int main(int argc, char *argv[]){
             fileSource = fileSource.substr(3);
         }
         file.close();
-        source += resolveIncludes(fileSource, std::filesystem::path(filePath).parent_path());
+        std::set<std::filesystem::path> includedFiles;
+        source += "#line 1\n";
+        source += resolveIncludes(fileSource, std::filesystem::path(filePath).parent_path(), includedFiles);
     }
     
     std::cout << "Tokenizing Code...\n";

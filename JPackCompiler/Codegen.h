@@ -22,6 +22,16 @@ struct ClassDefinition {
     std::vector<FunctionNode*> memberFunctions;
 };
 
+struct CompileTimeValue {
+    std::string stringValue;
+    bool isThis = false;
+};
+
+struct CompileTimeInstance {
+    std::string className;
+    std::unordered_map<std::string, std::string> memberValues;
+};
+
 class Codegen {
 public:
     Codegen(ProgramNode* programNode, std::string name, bool debugMode) : m_programNode(programNode), m_name(std::move(name)), m_debugMode(debugMode) {}
@@ -51,6 +61,8 @@ private:
     std::unordered_set<std::string> m_intrinsicFunctions;
     std::unordered_set<std::string> m_refIntrinsicFunctions;
     std::unordered_map<std::string, ClassDefinition> m_classDefinitions;
+    std::unordered_set<std::string> m_compileTimeClasses;
+    std::unordered_map<std::string, CompileTimeInstance> m_compileTimeInstances;
     std::unordered_map<std::string, std::string> m_instanceMembers; // maps "instanceName.memberName" -> scoreboard entry
     std::unordered_map<std::string, std::string> m_instanceTypes;
     int m_counter = 1;
@@ -66,12 +78,16 @@ private:
     void registerClasses();
     void generateClassMethods();
     void registerFunction(FunctionNode* fn);
+    CompileTimeValue evaluateCompileTimeMethod(CompileTimeInstance& instance, const std::string& methodName, const std::vector<std::unique_ptr<ASTNode>>& arguments);
+    std::string evaluateCompileTimeExpr(ASTNode* node, std::unordered_map<std::string, std::string>& locals);
     void generatePackMeta() const;
     void generateArrayGetHelper(std::string arrayName, int size) const;
     void generateTemplatePool(const std::string& poolName, const std::vector<TemplatePoolEntry>& entries) const;
     void generateStructure(const std::vector<std::string>& arguments) const;
     void generateStructureSet(const std::vector<std::string>& arguments) const;
     void generatePredicate(const std::string& predicateName, const std::string& predicateJson) const;
+    void generateLootTable(const std::vector<std::string>& arguments) const;
+    void generateTag(const std::vector<std::string>& arguments) const;
     void generateDimension(const std::string& dimensionName, std::string& dimensionTypeJson, std::string& dimensionGeneratorJson) const;
     void generateTickJson() const;
     void generateLoadJson() const;

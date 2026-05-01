@@ -80,6 +80,12 @@ void Codegen::generateFunction(FunctionNode* function) {
             }
         }
         
+        if (annotation->name == "lootTable" && annotation->arguments.size() >= 2) {
+            generateLootTable(annotation->arguments);
+        }
+        if (annotation->name == "tag" && annotation->arguments.size() >= 3) {
+            generateTag(annotation->arguments);
+        }
         if (annotation->name == "predicate" && annotation->arguments.size() >= 2) {
             generatePredicate(annotation->arguments[0], annotation->arguments[1]);
         }
@@ -151,6 +157,8 @@ void Codegen::generateFunction(FunctionNode* function) {
             if (auto* raw = dynamic_cast<RawCommandNode*>(statement.get())) {
                 std::regex pattern("\\{([a-zA-Z_][a-zA-Z0-9_]*)\\}");
                 std::string cmd = std::regex_replace(raw->command, pattern, "$($1)");
+                std::regex nsPattern("\\$\\(__ns\\)");
+                cmd = std::regex_replace(cmd, nsPattern, m_name);
                 file << "$" + cmd + "\n";
             }
         }
@@ -210,6 +218,25 @@ std::string Codegen::generateStatement(ASTNode* node) {
         if (m_classDefinitions.contains(variableTypeName)) {
             // instantiate class
             m_instanceTypes[variable->name] = variableTypeName;
+            
+            // if compile-time class, initialize instance with default member values
+            if (m_compileTimeClasses.contains(variableTypeName)) {
+                CompileTimeInstance instance;
+                instance.className = variableTypeName;
+                auto& def = m_classDefinitions[variableTypeName];
+                for (auto* memberVar : def.memberVariables) {
+                    std::string defaultVal;
+                    if (memberVar->value != nullptr) {
+                        if (auto* lit = dynamic_cast<LiteralNode*>(memberVar->value.get())) {
+                            defaultVal = lit->value;
+                        }
+                    }
+                    instance.memberValues[memberVar->name] = defaultVal;
+                }
+                m_compileTimeInstances[variable->name] = std::move(instance);
+                return sourceComment(variable);
+            }
+            
             auto& def = m_classDefinitions[variableTypeName];
             std::string out = sourceComment(variable);
             // create scoreboard entries for each member variable
@@ -236,6 +263,11 @@ std::string Codegen::generateStatement(ASTNode* node) {
                     out += "data modify storage " + m_name + ":vars " + variable->name + " set value \"" + literal->value + "\"\n";
                 } else if (auto* ident = dynamic_cast<IdentifierNode*>(variable->value.get())) {
                     out += "data modify storage " + m_name + ":vars " + variable->name + " set from storage " + m_name + ":vars " + m_storageNames[ident->name] + "\n";
+                } else {
+                    // general case
+                    ExprResult val = generateExpression(variable->value.get());
+                    out += val.commands;
+                    out += "data modify storage " + m_name + ":vars " + variable->name + " set value '" + val.resultEntry + "'\n";
                 }
             }
             return out;
@@ -399,6 +431,9 @@ std::string Codegen::generateStatement(ASTNode* node) {
 
 ExprResult Codegen::generateExpression(ASTNode* node) {
     if (auto* ident = dynamic_cast<IdentifierNode*>(node)) {
+        if (m_compileTimeInstances.contains(ident->name)) {
+            return {.commands = "", .resultEntry = ident->name, .isStorage = true};
+        }
         if (m_storageNames.contains(ident->name)) {
             return {.commands = "", .resultEntry = m_storageNames[ident->name], .isStorage = true};
         }
@@ -420,6 +455,27 @@ ExprResult Codegen::generateExpression(ASTNode* node) {
         return {.commands = "", .resultEntry = ""};
     }
     if (auto* method = dynamic_cast<MethodCallNode*>(node)) {
+        ExprResult objResult = generateExpression(method->object.get());
+        std::string instanceName = objResult.resultEntry;
+        std::string classType = m_instanceTypes[instanceName];
+        if (m_compileTimeClasses.contains(classType)) {
+            auto& instance = m_compileTimeInstances[instanceName];
+            
+            std::string methodLower = method->methodName;
+            std::ranges::transform(methodLower, methodLower.begin(),
+                [](unsigned char c) { return std::tolower(c); });
+            
+            CompileTimeValue result = evaluateCompileTimeMethod(
+                instance, methodLower, method->arguments);
+            
+            if (result.isThis) {
+                // return the instance itself for chaining
+                // represent as a special storage value
+                return {.commands = "", .resultEntry = instanceName, .isStorage = true};
+            }
+            return {.commands = "", .resultEntry = result.stringValue, .isStorage = true};
+        }
+        
         if (auto* ident = dynamic_cast<IdentifierNode*>(method->object.get())) {
             // find which class this instance belongs to
             std::string instanceName = ident->name;
@@ -785,6 +841,12 @@ void Codegen::registerClasses() {
                 }
             }
             
+            for (auto& annotation : classNode->annotations) {
+                if (annotation->name == "compile_time_class") {
+                    m_compileTimeClasses.insert(classNode->name);
+                }
+            }
+            
             // register method functions with implicit member variable parameters
             std::string classNameLower = classNode->name;
             std::ranges::transform(classNameLower, classNameLower.begin(),
@@ -831,6 +893,7 @@ void Codegen::registerClasses() {
 
 void Codegen::generateClassMethods() {
     for (auto& def : m_classDefinitions) {
+        if (m_compileTimeClasses.contains(def.first)) continue;
         for (auto& function : def.second.memberFunctions) {
             m_localVarEntries.clear();
             auto savedScoreboardNames = m_scoreboardNames;
@@ -910,6 +973,102 @@ void Codegen::registerFunction(FunctionNode* fn) {
         m_functionParamIsRef[func].emplace_back(param->type.isReference);
         m_scoreboardNames[param->name] = uuid;
     }
+}
+
+CompileTimeValue Codegen::evaluateCompileTimeMethod(CompileTimeInstance& instance, const std::string& methodName,
+                                                    const std::vector<std::unique_ptr<ASTNode>>& arguments) {
+    
+    auto& classDef = m_classDefinitions[instance.className];
+    
+    // find the method
+    FunctionNode* method = nullptr;
+    for (auto* fn : classDef.memberFunctions) {
+        std::string fnLower = fn->name;
+        std::ranges::transform(fnLower, fnLower.begin(),
+            [](unsigned char c) { return std::tolower(c); });
+        if (fnLower == methodName) {
+            method = fn;
+            break;
+        }
+    }
+    if (!method) return {.stringValue = "", .isThis = false};
+    
+    // set up parameter values
+    std::unordered_map<std::string, std::string> localStrings = instance.memberValues;
+    for (size_t i = 0; i < method->parameters.size() && i < arguments.size(); i++) {
+        std::string argVal = evaluateCompileTimeExpr(arguments[i].get(), localStrings);
+        localStrings[method->parameters[i]->name] = argVal;
+    }
+    
+    // evaluate method body
+    for (auto& statement : method->body) {
+        if (auto* ret = dynamic_cast<ReturnNode*>(statement.get())) {
+            if (auto* thisNode = dynamic_cast<ThisNode*>(ret->returnVal.get())) {
+                // update instance member values and return this
+                instance.memberValues = localStrings;
+                return {.stringValue = "", .isThis = true};
+            }
+            // return a string value
+            std::string val = evaluateCompileTimeExpr(ret->returnVal.get(), localStrings);
+            // strip trailing comma before ] if present
+            if (val.size() >= 2 && val[val.size()-2] == ',') {
+                val.erase(val.size()-2, 1);
+            }
+            return {.stringValue = val, .isThis = false};
+        }
+        if (auto* assign = dynamic_cast<MemberAssignNode*>(statement.get())) {
+            std::string val = evaluateCompileTimeExpr(assign->value.get(), localStrings);
+            localStrings[assign->memberName] = val;
+        }
+        if (auto* binary = dynamic_cast<BinaryExprNode*>(statement.get())) {
+            if (binary->op == TokenType::EQUAL) {
+                if (auto* ident = dynamic_cast<IdentifierNode*>(binary->left.get())) {
+                    std::string val = evaluateCompileTimeExpr(binary->right.get(), localStrings);
+                    localStrings[ident->name] = val;
+                }
+            }
+        }
+        if (auto* var = dynamic_cast<VariableNode*>(statement.get())) {
+            std::string val = var->value ? evaluateCompileTimeExpr(var->value.get(), localStrings) : "";
+            localStrings[var->name] = val;
+        }
+    }
+    instance.memberValues = localStrings;
+    return {.stringValue = "", .isThis = false};
+}
+
+std::string Codegen::evaluateCompileTimeExpr(ASTNode* node, std::unordered_map<std::string, std::string>& locals) {
+    if (auto* lit = dynamic_cast<LiteralNode*>(node)) {
+        if (lit->type == TokenType::INT_LITERAL) {
+            return lit->value; // may need special handlign in the future
+        }
+        return lit->value;
+    }
+    if (auto* ident = dynamic_cast<IdentifierNode*>(node)) {
+        if (locals.contains(ident->name)) return locals[ident->name];
+        if (m_scoreboardNames.contains(ident->name)) {
+            std::cerr << "Codegen WARNING: cannot use runtime value '" 
+                      << ident->name << "' in compile-time context\n";
+        }
+        return "";
+    }
+    if (auto* member = dynamic_cast<MemberAccessNode*>(node)) {
+        if (auto* ident = dynamic_cast<IdentifierNode*>(member->object.get())) {
+            if (locals.contains(ident->name + "." + member->memberName))
+                return locals[ident->name + "." + member->memberName];
+        }
+        return "";
+    }
+    if (auto* binary = dynamic_cast<BinaryExprNode*>(node)) {
+        if (binary->op == TokenType::PLUS) {
+            return evaluateCompileTimeExpr(binary->left.get(), locals) +
+                   evaluateCompileTimeExpr(binary->right.get(), locals);
+        }
+    }
+    if (auto* json = dynamic_cast<JsonNode*>(node)) {
+        return serializeJson(json);
+    }
+    return "";
 }
 
 void Codegen::generatePackMeta() const {
@@ -1048,6 +1207,33 @@ void Codegen::generatePredicate(const std::string& predicateName, const std::str
     std::filesystem::create_directories(path.parent_path());
     
     nlohmann::json json = nlohmann::json::parse(predicateJson);
+    std::ofstream file(path);
+    file << std::setw(4) << json << '\n';
+}
+
+void Codegen::generateLootTable(const std::vector<std::string>& arguments) const {
+    const std::string& tableName = arguments[0];
+    const std::string& tableJson = arguments[1];
+    
+    auto path = std::filesystem::path(m_outputPath) / "data" / m_name / "loot_table" / (tableName + ".json");
+    std::filesystem::create_directories(path.parent_path());
+    
+    nlohmann::json json = nlohmann::json::parse(tableJson);
+    std::ofstream file(path);
+    file << std::setw(4) << json << '\n';
+}
+
+void Codegen::generateTag(const std::vector<std::string>& arguments) const {
+    const std::string& tagType = arguments[0];
+    const std::string& tagName = arguments[1];
+    const std::string& values = arguments[2];// serialized JSON array
+    
+    auto path = std::filesystem::path(m_outputPath) / "data" / m_name / "tags" / tagType / (tagName + ".json");
+    std::filesystem::create_directories(path.parent_path());
+    
+    nlohmann::json json;
+    json["values"] = nlohmann::json::parse(values);
+    
     std::ofstream file(path);
     file << std::setw(4) << json << '\n';
 }
