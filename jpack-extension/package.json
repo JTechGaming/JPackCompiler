@@ -2,20 +2,36 @@
     "name": "jpack",
     "displayName": "JPack Language Support",
     "description": "Syntax highlighting for the JPack language",
-    "version": "0.0.4",
+    "version": "0.0.5",
     "engines": {"vscode": "^1.60.0"},
-    "categories": ["Programming Languages"],
+    "main": "./extension.js",
+    "activationEvents": ["onLanguage:jpack"],
+    "dependencies": {
+        "vscode-languageclient": "^8.0.0"
+    },
+    "categories": [
+        "Programming Languages"
+    ],
     "contributes": {
-        "languages": [{
-            "id": "jpack",
-            "aliases": ["JPack", "jpack"],
-            "extensions": [".jpack"],
-            "configuration": "./language-configuration.json"
-        }],
-        "grammars": [{
-            "language": "jpack",
-            "scopeName": "source.jpack",
-            "path": "./syntaxes/jpack.tmLanguage.json"
-        }]
+        "languages": [
+            {
+                "id": "jpack",
+                "aliases": [
+                    "JPack",
+                    "jpack"
+                ],
+                "extensions": [
+                    ".jpack"
+                ],
+                "configuration": "./language-configuration.json"
+            }
+        ],
+        "grammars": [
+            {
+                "language": "jpack",
+                "scopeName": "source.jpack",
+                "path": "./syntaxes/jpack.tmLanguage.json"
+            }
+        ]
     }
 }

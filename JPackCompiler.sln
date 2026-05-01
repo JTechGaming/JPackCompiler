@@ -2,6 +2,8 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "JPackCompiler", "JPackCompiler\JPackCompiler.vcxproj", "{79BE3977-CC4F-4CC9-BB31-4840616B5D47}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "JPackLanguageServer", "JPackLanguageServer\JPackLanguageServer.vcxproj", "{37432FC2-BFA5-4DB8-B60C-6897077A37E8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -18,5 +20,13 @@ Global
 		{79BE3977-CC4F-4CC9-BB31-4840616B5D47}.Release|Win32.Build.0 = Release|Win32
 		{79BE3977-CC4F-4CC9-BB31-4840616B5D47}.Release|x64.ActiveCfg = Release|x64
 		{79BE3977-CC4F-4CC9-BB31-4840616B5D47}.Release|x64.Build.0 = Release|x64
+		{37432FC2-BFA5-4DB8-B60C-6897077A37E8}.Debug|Win32.ActiveCfg = Debug|Win32
+		{37432FC2-BFA5-4DB8-B60C-6897077A37E8}.Debug|Win32.Build.0 = Debug|Win32
+		{37432FC2-BFA5-4DB8-B60C-6897077A37E8}.Debug|x64.ActiveCfg = Debug|x64
+		{37432FC2-BFA5-4DB8-B60C-6897077A37E8}.Debug|x64.Build.0 = Debug|x64
+		{37432FC2-BFA5-4DB8-B60C-6897077A37E8}.Release|Win32.ActiveCfg = Release|Win32
+		{37432FC2-BFA5-4DB8-B60C-6897077A37E8}.Release|Win32.Build.0 = Release|Win32
+		{37432FC2-BFA5-4DB8-B60C-6897077A37E8}.Release|x64.ActiveCfg = Release|x64
+		{37432FC2-BFA5-4DB8-B60C-6897077A37E8}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 EndGlobal
