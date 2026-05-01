@@ -18,7 +18,16 @@ void Codegen::generate(std::string outputPath) {
     
     // clean output directory before generating
     if (std::filesystem::exists(m_outputPath)) {
-        std::filesystem::remove_all(m_outputPath);
+        std::error_code ec;
+        std::filesystem::remove_all(m_outputPath, ec);
+        if (ec) {
+            if (ec == std::errc::permission_denied) {
+                std::cerr << "Error: Permission denied for " << m_outputPath << "\n";
+                std::cerr << "This is not a big deal, it just means your output directory may contain more files than it has to.\n";
+            } else {
+                std::cerr << "Error: " << ec.message() << " (" << m_outputPath << ")\n";
+            }
+        }
     }
     
     auto functionsPath = std::filesystem::path(m_outputPath) / "data" / m_name / FUNCTIONS_DIR;
