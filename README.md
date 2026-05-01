@@ -2,6 +2,8 @@
 
 JPackCompiler is a compiler for the JPack language, a C/C++-like programming language that compiles to Minecraft Java Edition datapacks. Instead of writing raw `.mcfunction` files, you write structured code with variables, functions, control flow, and classes, and the compiler handles generating the datapack file structure, scoreboard management, and NBT storage.
 
+If you have any issues or questions, you can report/ask them on github or in my discord server: https://discord.gg/Vc7j8RuztG
+
 ## How it works
 
 JPack compiles to Minecraft datapacks by mapping language constructs to datapack primitives:
@@ -74,8 +76,8 @@ A VS Code extension providing syntax highlighting for `.jpack` files is included
 
 - Multiplication and division between two variables works, but there is no native floating point arithmetic. Float and double values use fixed-point integer arithmetic with potential precision loss on repeated multiplication.
 - Recursive functions work but share parameter scoreboard entries, so a function calling itself will overwrite its own parameters before the recursive call completes.
-- Classes and structs are parsed and represented in the AST but are not yet implemented in codegen. Enums are similarly parsed but not yet compiled.
+- Structs are parsed and represented in the AST but are not yet implemented in codegen. Enums are similarly parsed but not yet compiled.
 - Target selectors containing conditions such as `@a[tag=something]` may cause issues in some contexts due to how curly braces are handled in the macro system. Use `@store_result_intrinsic` for execute-chain selectors.
 - `Server::schedule` only works correctly with zero-argument functions or wrapper functions. Arguments passed to the inner function call are discarded at compile time.
 - Array writes via index assignment are supported but the `__array_set` macro helper requires the array name to be passed explicitly, which is not yet fully automated.
-- The portal dimension transition uses a fixed 20-tick delay for chunk loading which may be insufficient on very slow machines or servers.
+- (Issue of the dungeon example, but exposes some current lang limitations) The portal dimension transition uses a fixed 20-tick delay for chunk loading which may be insufficient on very slow machines or servers.
